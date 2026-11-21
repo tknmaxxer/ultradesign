@@ -76,8 +76,11 @@ async def primary_action(page, task):
         form = page.locator("form").filter(has=page.get_by_role("textbox")).last
     title = form.get_by_role("textbox").first
     await title.fill("Review the launch checklist")
-    # A regex matches visible accessible names without depending on DOM classes.
-    submit = form.get_by_role("button", name=re.compile(r"add|save|create", re.I))
+    # Prefer the form's submit control. A dialog can also expose a
+    # non-submit button named "Close add task form".
+    submit = form.locator("button[type=submit], input[type=submit], form button:not([type])").filter(visible=True)
+    if await submit.count() == 0:
+        submit = form.get_by_role("button", name=re.compile(r"^(?:add|save|create)(?:\s|$)", re.I))
     await submit.first.click()
     await page.get_by_text("Review the launch checklist", exact=True).first.wait_for(state="visible")
     return True

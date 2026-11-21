@@ -10,6 +10,7 @@ import { promisify } from "node:util";
 
 const script = fileURLToPath(new URL("../skills/ultradesign/scripts/visual-qa.py", import.meta.url));
 const reference = fileURLToPath(new URL("../skills/ultradesign/scripts/reference-capture.py", import.meta.url));
+const probe = fileURLToPath(new URL("../evals/probe.py", import.meta.url));
 const dir = mkdtempSync(join(tmpdir(), "ud-visual-qa-"));
 let foreignRequests = 0;
 const foreign = createServer((_req, res) => { foreignRequests++; res.end(); });
@@ -30,9 +31,15 @@ try {
       <p id="okay">This text passes the contrast check.</p>
       <img alt="" src="http://127.0.0.1:${foreign.address().port}/foreign.png">
     </main></body></html>`;
-  local = createServer((_req, res) => {
+  const mobile = `<!doctype html><button onclick="dialog.showModal()">Add task</button>
+    <dialog id="dialog"><button type="button" aria-label="Close add task form" onclick="dialog.close()">×</button>
+    <form><label>Task title <input required></label><button type="submit">Add task</button></form></dialog>
+    <p id="saved"></p><script>document.querySelector("form").onsubmit = event => {
+      event.preventDefault(); saved.textContent = document.querySelector("input").value; dialog.close();
+    };</script>`;
+  local = createServer((req, res) => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.end(html);
+    res.end(req.url === "/mobile" ? mobile : html);
   });
   local.listen(0, "127.0.0.1");
   await once(local, "listening");
@@ -78,6 +85,11 @@ try {
     }
   }
   console.log("Reference capture smoke passed: three full-page and six region PNGs with linked pattern notes.");
+  const behavior = join(dir, "mobile-probe.json");
+  await promisify(execFile)("uv", ["run", "--script", probe, "--url", new URL("mobile", referenceUrl).href,
+    "--task", "mobile", "--out", behavior]);
+  assert.equal(JSON.parse(readFileSync(behavior, "utf8")).primaryActionPassed, true);
+  console.log("Mobile action probe smoke passed: submits the task without selecting the close control.");
 } finally {
   local?.close();
   foreign.close();
