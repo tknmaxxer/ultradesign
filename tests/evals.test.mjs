@@ -155,17 +155,18 @@ async function fixture(failure = "") {
   const omp = join(root, "omp.mjs"), uv = join(root, "uv.mjs"), audit = join(root, "audit.jsonl");
   await writeFile(omp, `#!/usr/bin/env node
 import {appendFileSync,writeFileSync} from "node:fs";import{createInterface}from"node:readline";
-const args=process.argv.slice(2),model=args[args.indexOf("--model")+1],judge=args.includes("--no-tools");
+const args=process.argv.slice(2),model=args[args.indexOf("--model")+1],judge=model.startsWith("judge/");
 const emit=value=>console.log(JSON.stringify(value));
 createInterface({input:process.stdin}).on("line",line=>{
  const c=JSON.parse(line);
  if(c.type==="get_state")return emit({type:"response",id:c.id,success:true,data:{model:{provider:model.split("/")[0],id:model.slice(model.indexOf("/")+1)}}});
  if(c.type==="get_available_commands")return emit({type:"response",id:c.id,success:true,data:{commands:args.includes("-e")?[{name:"ud"}]:[]}});
- appendFileSync(${JSON.stringify(audit)},JSON.stringify({args,model,judge,cwd:process.cwd(),home:process.env.HOME,prompt:c.message,images:c.images?.map(i=>Object.keys(i)),envKeys:Object.keys(process.env)})+"\\n");
+ appendFileSync(${JSON.stringify(audit)},JSON.stringify({args,model,judge,cwd:process.cwd(),home:process.env.HOME,prompt:c.message,images:c.images?.map(i=>Object.keys(i)),envKeys:Object.keys(process.env),thinking:process.env.ULTRADESIGN_THINKING_LEVEL})+"\\n");
  if(${JSON.stringify(failure)}==="builder"&&!judge)return emit({type:"response",id:c.id,success:false,error:"secret-token-should-not-escape"});
- if(!judge&&${JSON.stringify(failure)}!=="unchanged")writeFileSync("index.html","<!doctype html><html lang=en><title>Fixture</title><h1>Fixture</h1></html>");
+ const html="<!doctype html><html lang=en><title>Fixture</title><h1>Fixture</h1></html>";
+ if(!judge&&!args.includes("--no-tools")&&${JSON.stringify(failure)}!=="unchanged")writeFileSync("index.html",html);
  emit({type:"response",id:c.id,success:true});
- emit({type:"message_end",message:{role:"assistant",provider:model.split("/")[0],model:model.slice(model.indexOf("/")+1),content:[{type:"text",text:judge?JSON.stringify(${JSON.stringify(judgment())}):"done"}]}});
+ emit({type:"message_end",message:{role:"assistant",provider:model.split("/")[0],model:model.slice(model.indexOf("/")+1),content:[{type:"text",text:judge?JSON.stringify(${JSON.stringify(judgment())}):args.includes("--no-tools")?html:"done"}]}});
  emit({type:"prompt_result",id:c.id,status:"completed",sessionSettled:true});
 });\n`);
   await writeFile(uv, `#!/usr/bin/env node
@@ -181,12 +182,17 @@ else{mkdirSync(out,{recursive:true});writeFileSync(join(out,"checks.json"),JSON.
 test("runner integrates isolated fresh builders, anonymous fresh judge, and separated owner/model reports", async () => {
   const data = await fixture();
   try {
-    const htmlPath = await run(data.options);
+    const htmlPath = await run({ ...data.options, "builder-thinking": "low" });
     const audit = (await readFile(data.audit, "utf8")).trim().split("\n").map(JSON.parse);
     assert.equal(audit.length, 3);
     assert.equal(new Set(audit.map(entry => entry.home)).size, 3);
     const builders = audit.filter(entry => !entry.judge), judge = audit.find(entry => entry.judge);
     assert.equal(builders.length, 2);
+    for (const b of builders) {
+      assert.equal(b.args[b.args.indexOf("--thinking") + 1], "low");
+      assert.equal(b.thinking, "low");
+    }
+    assert.equal(judge.args[judge.args.indexOf("--thinking") + 1], "high");
     assert.equal(builders.find(entry => entry.prompt.startsWith("/ud ")).prompt.slice(4), builders.find(entry => !entry.prompt.startsWith("/ud ")).prompt);
     assert.equal(judge.images.length, 6);
     assert.ok(judge.images.every(keys => keys.sort().join() === "data,mimeType,type"));
@@ -194,6 +200,7 @@ test("runner integrates isolated fresh builders, anonymous fresh judge, and sepa
     for (const entry of audit) await assert.rejects(access(entry.home));
     const manifest = JSON.parse(await readFile(join(data.options.out, "private", "manifest.json")));
     assert.equal(manifest.status, "completed");
+    assert.equal(manifest.builderThinking, "low");
     assert.deepEqual(Object.values(manifest.tasks[0].mapping).sort(), ["baseline", "treatment"]);
     const owner = await readFile(htmlPath, "utf8");
     assert.match(owner, /owner-picks/);
@@ -221,6 +228,26 @@ test("failed builder records its phase without stderr/secrets, publishes no repo
     assert.deepEqual(await readdir(join(data.options.out, "blind")), []);
     const audit = JSON.parse((await readFile(data.audit, "utf8")).trim());
     await assert.rejects(access(audit.home));
+  } finally { await rm(data.root, { recursive: true, force: true }); }
+});
+
+test("HTML delivery uses tool-free builders and provides the canonical prompts only to /ud", async () => {
+  const data = await fixture();
+  try {
+    await run({ ...data.options, "builder-output": "html" });
+    const builders = (await readFile(data.audit, "utf8")).trim().split("\n").map(JSON.parse).filter(e => !e.judge);
+    const treatment = builders.find(e => e.prompt.startsWith("/ud "));
+    const baseline = builders.find(e => !e.prompt.startsWith("/ud "));
+    assert.ok(builders.every(e => e.args.includes("--no-tools")));
+    assert.equal(treatment.prompt.slice(4), baseline.prompt);
+    assert.match(baseline.prompt, /exactly one complete, self-contained HTML/);
+    assert.ok(!baseline.args.includes("--append-system-prompt"));
+    const guidance = treatment.args[treatment.args.indexOf("--append-system-prompt") + 1];
+    assert.match(guidance, /# 1 · Collect, reconstruct, adapt/);
+    assert.match(guidance, /# 5 · Verify the real design/);
+    const manifest = JSON.parse(await readFile(join(data.options.out, "private", "manifest.json")));
+    assert.equal(manifest.builderOutput, "html");
+    assert.equal(manifest.status, "completed");
   } finally { await rm(data.root, { recursive: true, force: true }); }
 });
 

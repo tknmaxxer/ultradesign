@@ -2,7 +2,7 @@
 import { spawn } from "node:child_process";
 import { randomInt, createHash } from "node:crypto";
 import { createServer } from "node:http";
-import { chmod, copyFile, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { createInterface } from "node:readline";
@@ -17,8 +17,8 @@ const scoreKeys = [...Object.keys(criteria), "motion_presence"];
 const processes = new Set();
 
 export function parseArgs(argv) {
-  const options = { omp: "omp", uv: "uv", timeout: 900, task: "all" };
-  const names = new Set(["builder-model", "judge-model", "out", "task", "omp", "uv", "timeout", "model-config", "credential-env"]);
+  const options = { omp: "omp", uv: "uv", timeout: 900, task: "all", "builder-thinking": "high", "builder-output": "files" };
+  const names = new Set(["builder-model", "builder-thinking", "builder-output", "judge-model", "out", "task", "omp", "uv", "timeout", "model-config", "credential-env"]);
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--help") return { help: true };
     const key = argv[i].slice(2);
@@ -35,6 +35,10 @@ export function parseArgs(argv) {
     if (!/^[^\s/]+\/[^\s]+$/.test(options[key] ?? "")) throw new Error(`--${key} must be an explicit provider/model.`);
   }
   if (options["builder-model"] === options["judge-model"]) throw new Error("Judge model must differ from builder model.");
+  if (!["off", "minimal", "low", "medium", "high", "xhigh"].includes(options["builder-thinking"])) {
+    throw new Error("--builder-thinking must be off, minimal, low, medium, high, or xhigh.");
+  }
+  if (!["files", "html"].includes(options["builder-output"])) throw new Error("--builder-output must be files or html.");
   if (!options.out) throw new Error("--out is required and must not exist.");
   if (options.task !== "all" && !tasks.some(task => task.id === options.task)) throw new Error("Unknown --task.");
   options.timeout = Number(options.timeout);
@@ -46,7 +50,7 @@ export function parseArgs(argv) {
 
 // Keep authentication channels, not user agent configuration, session handles, skills, or extension paths.
 // Neither this environment nor the optional model catalog is ever written into results.
-export function isolatedEnv(host, home, agent, model, credentialNames = []) {
+export function isolatedEnv(host, home, agent, model, credentialNames = [], thinking = "high") {
   const env = {};
   const provider = model.split("/")[0];
   const prefix = ({ google: "GEMINI", "openai-codex": "OPENAI", "azure-openai": "AZURE_OPENAI" })[provider]
@@ -62,7 +66,7 @@ export function isolatedEnv(host, home, agent, model, credentialNames = []) {
     ...env, HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, ".config"),
     XDG_DATA_HOME: join(home, ".local", "share"), XDG_CACHE_HOME: join(home, ".cache"),
     PI_CODING_AGENT_DIR: agent, TMPDIR: join(home, "tmp"), TMP: join(home, "tmp"), TEMP: join(home, "tmp"),
-    ULTRADESIGN_MODEL: model, ULTRADESIGN_THINKING_LEVEL: "high",
+    ULTRADESIGN_MODEL: model, ULTRADESIGN_THINKING_LEVEL: thinking,
     PI_SMOL_MODEL: model, PI_SLOW_MODEL: model, PI_PLAN_MODEL: model,
     NO_COLOR: "1", TERM: "dumb",
   };
@@ -79,11 +83,11 @@ export function rendererEnv(host, session) {
   return env;
 }
 
-export function ompArgs(model, treatment = false, judge = false) {
+export function ompArgs(model, treatment = false, judge = false, thinking = "high", output = "files") {
   const args = ["--mode", "rpc", "--no-ui", "--no-session", "--no-extensions", "--no-skills", "--no-rules", "--no-context-files",
-    "--no-lsp", "--no-prewalk", "--no-title", "--thinking", "high", "--model", model, "--smol", model, "--slow", model, "--plan", model,
+    "--no-lsp", "--no-prewalk", "--no-title", "--thinking", thinking, "--model", model, "--smol", model, "--slow", model, "--plan", model,
     "--system-prompt", judge ? judgeSystem : neutralSystem];
-  if (judge) args.push("--no-tools");
+  if (judge || output === "html") args.push("--no-tools");
   else {
     const tools = ["read", "write", "edit"];
     if (treatment) tools.push("ultradesign_checkpoint");
@@ -203,7 +207,7 @@ export class RpcClient {
   }
 }
 
-async function makeSession(root, options, model) {
+async function makeSession(root, options, model, thinking = "high") {
   const home = await mkdtemp(join(root, "session-"));
   const agent = join(home, ".omp", "agent");
   const cwd = join(home, "project");
@@ -215,7 +219,7 @@ async function makeSession(root, options, model) {
   await mkdir(join(cwd, ".git", "refs"));
   await writeFile(join(cwd, ".git", "HEAD"), "ref: refs/heads/main\n");
   if (options["model-config"]) await copyFile(options["model-config"], join(agent, "models.yml"));
-  return { home, cwd, env: isolatedEnv(process.env, home, agent, model, options["credential-env"]) };
+  return { home, cwd, env: isolatedEnv(process.env, home, agent, model, options["credential-env"], thinking) };
 }
 
 async function command(binary, args, options) {
@@ -318,9 +322,21 @@ ${showScores ? `<section aria-label="Runtime observations"><h2>Primary-action ob
 
 async function runBuilder(root, options, task, treatment) {
   const model = options["builder-model"];
-  const session = await makeSession(root, options, model);
+  const thinking = options["builder-thinking"] ?? "high";
+  const output = options["builder-output"] ?? "files";
+  const session = await makeSession(root, options, model, thinking);
   if (task.seed) await writeFile(join(session.cwd, "index.html"), task.seed);
-  const client = new RpcClient(options.omp, ompArgs(model, treatment), { ...session, timeout: options.timeout });
+  const args = ompArgs(model, treatment, false, thinking, output);
+  if (treatment && output === "html") {
+    // This tool-free build surface invokes /ud but needs the same canonical
+    // instructions delivered upfront instead of loading them with file tools.
+    const skill = join(repo, "skills/ultradesign");
+    const prompts = (await readdir(join(skill, "prompts"))).filter(name => /^\d\d-.*\.md$/.test(name)).sort();
+    const guidance = await Promise.all(["SKILL.md", ...prompts.map(name => `prompts/${name}`)]
+      .map(name => readFile(join(skill, name), "utf8")));
+    args.push("--append-system-prompt", `Use this copy of the canonical workflow for the tool-free HTML delivery. Work through relevant stages in reasoning; the runner handles files and rendered QA. Finish with the HTML document, without file tools or checkpoints.\n\n${guidance.join("\n\n")}`);
+  }
+  const client = new RpcClient(options.omp, args, { ...session, timeout: options.timeout });
   try {
     await client.assertModel(model);
     const available = await client.request("get_available_commands");
@@ -328,10 +344,18 @@ async function runBuilder(root, options, task, treatment) {
     if (!Array.isArray(commands)) throw new Error("OMP command discovery returned an unsupported shape.");
     const hasUd = commands.some(command => command.name?.replace(/^\//, "") === "ud");
     if (hasUd !== treatment) throw new Error("OMP command isolation failed.");
-    const prompt = `${treatment ? "/ud " : ""}${briefFor(task)}`;
+    const delivery = output === "html" ? `\n\nIn this tool-free session, return exactly one complete, self-contained HTML document (inline CSS and JS), optionally fenced as html. The runner saves the response as index.html. Perform design work in reasoning and put nothing before or after the document.${task.seed ? `\n\nStarting HTML:\n${task.seed}` : ""}` : "";
+    const prompt = `${treatment ? "/ud " : ""}${briefFor(task)}${delivery}`;
     await client.request("prompt", { message: prompt });
     await client.assertModel(model);
     const html = join(session.cwd, "index.html");
+    if (output === "html") {
+      const document = client.text().trim().replace(/^```(?:html)?\s*\n/i, "").replace(/\n```\s*$/, "");
+      if (!/^<!doctype html>\s*<html[\s>][\s\S]*<\/html>$/i.test(document)) {
+        throw new Error("Builder did not return a complete HTML document.");
+      }
+      await writeFile(html, document);
+    }
     if (!(await stat(html)).isFile()) throw new Error("Builder did not produce index.html.");
     const result = (await readFile(html, "utf8")).trim();
     if (!result || result === task.seed.trim()) throw new Error("Builder did not produce a finished index.html.");
@@ -396,7 +420,8 @@ export async function run(options) {
   process.on("SIGINT", interrupt);
   process.on("SIGTERM", interrupt);
   const pairs = [];
-  const manifest = { version: 1, status: "running", builderModel: options["builder-model"], judgeModel: options["judge-model"],
+  const manifest = { version: 1, status: "running", builderModel: options["builder-model"], builderThinking: options["builder-thinking"] ?? "high",
+    builderOutput: options["builder-output"] ?? "files", judgeModel: options["judge-model"],
     judgeFreshSession: true, tasks: [], limitations: ["Single sample per condition and task; no statistical inference.",
       "Primary-action probes cover one accessible action per task. Runtime animation sampling is not a motion-quality or reduced-motion evaluation.",
       "No runtime code-reuse measurement.", "No host auth database or configuration is loaded implicitly."] };
@@ -475,6 +500,8 @@ export async function run(options) {
 
 const help = `Usage: node evals/run.mjs --builder-model provider/model --judge-model provider/model --out NEW_DIR
   --task dashboard|landing|settings|mobile|all  (default: all)
+  --builder-thinking LEVEL  Identical effort for both builders (default: high)
+  --builder-output MODE  files (default, full tool workflow) or html (tool-free smoke)
   --model-config FILE  Explicit trusted OMP models.yml for custom providers (temporary copy only)
   --credential-env NAME  Additional credential variable to forward (repeatable; names only)
   --omp PATH          OMP CLI executable (default: omp)

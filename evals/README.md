@@ -21,7 +21,8 @@ bundled services or guaranteed available models.
 
 Each condition receives identical content, seed files, and synthetic offline
 pattern studies. This keeps live reference access outside the benchmark. Both
-use high thinking effort and identical builder/stage model settings, with local
+use the same `--builder-thinking` effort (default: `high`) and identical
+builder/stage model settings, with local
 file tools. The runner, rather than the builder session, executes the browser.
 Only treatment loads the OMP extension, gains its
 checkpoint tool, and invokes `/ud`. Run order and A/B assignment are independently
@@ -29,6 +30,14 @@ randomized per task. Each builder and visual judge has a fresh temporary HOME,
 agent directory, and project; automatic context files, extensions, rules, and
 skills are disabled. The judge has no tools and receives only the brief plus six
 anonymous full-page screenshots at 390, 768, and 1440 px.
+
+Use `--builder-output html` for a bounded smoke of the `/ud` policy and canonical
+prompts through final rendering and blind judging. Both builders then return a
+single HTML document without tools. Treatment still invokes `/ud`, and the
+runner includes the canonical prompts inline so the tool-free model can use
+them. This mode does not measure intermediate checkpoint, task delegation, or
+tool-driven implementation behavior. Use the default `files` mode to evaluate
+the native file-tool workflow, and compare only like-for-like output modes.
 
 Provider credentials come from the selected provider's `PREFIX_API_KEY` or
 `PREFIX_ACCESS_TOKEN`; the provider prefix is uppercased with punctuation replaced
