@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 const script = fileURLToPath(new URL("../skills/ultradesign/scripts/visual-qa.py", import.meta.url));
+const reference = fileURLToPath(new URL("../skills/ultradesign/scripts/reference-capture.py", import.meta.url));
 const dir = mkdtempSync(join(tmpdir(), "ud-visual-qa-"));
 let foreignRequests = 0;
 const foreign = createServer((_req, res) => { foreignRequests++; res.end(); });
@@ -16,7 +17,7 @@ let local;
 try {
   foreign.listen(0, "127.0.0.1");
   await once(foreign, "listening");
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>QA fixture</title>
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>QA fixture</title>
     <style>
       body { background: #fff; color: #000; margin: 0; padding: 8px }
       p { margin: 0; padding: 4px }
@@ -56,6 +57,27 @@ try {
     assert.equal(png.readUInt32BE(16), viewport.width);
   }
   console.log("Visual QA smoke passed: 3 defaults + both breakpoint sides, PNG dimensions, overflow, spacing and contrast.");
+  const referenceOut = join(dir, "reference");
+  const referenceUrl = `http://127.0.0.1:${local.address().port}/`;
+  const referenceArgs = ["run", "--script", reference, "--url", referenceUrl, "--out", referenceOut,
+    "--region", "task=#panel", "--region", "detail=#okay",
+    "--pattern", "Aligned rows", "--why", "Scan matching edges", "--adapt", "Use the project text", "--ready", "#okay"];
+  await assert.rejects(promisify(execFile)("uv", referenceArgs), /use a public HTTPS URL/);
+  await promisify(execFile)("uv", [...referenceArgs, "--local"]);
+  assert.equal(foreignRequests, 0);
+  const note = readFileSync(join(referenceOut, "pattern.md"), "utf8");
+  assert.ok(note.includes(referenceUrl));
+  assert.match(note, /## Pattern\n\nAligned rows[\s\S]*## Why it works\n\nScan matching edges[\s\S]*## How to adapt\n\nUse the project text/);
+  for (const width of [390, 768, 1440]) {
+    for (const name of ["page", "task", "detail"]) {
+      const file = `${name}-${width}.png`;
+      assert.ok(note.includes(`[${file}](${file})`), `missing note link for ${file}`);
+      const png = readFileSync(join(referenceOut, file));
+      assert.equal(png.subarray(1, 4).toString(), "PNG", file);
+      if (name === "page") assert.equal(png.readUInt32BE(16), width);
+    }
+  }
+  console.log("Reference capture smoke passed: three full-page and six region PNGs with linked pattern notes.");
 } finally {
   local?.close();
   foreign.close();

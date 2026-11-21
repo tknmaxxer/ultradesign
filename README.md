@@ -1,4 +1,4 @@
-# Ultradesign v0.1
+# Ultradesign v0.2
 
 [한국어](#한국어) · [English](#english)
 
@@ -40,7 +40,7 @@ OMP에서 설치 없이 한 세션만 쓰려면 `omp -e /path/to/ultradesign`으
 
 계획은 디자인 계약과 확인 기준, 리뷰는 우선순위가 있는 관찰 결과, 구현은 동작하는 UI와 검증 근거를 남깁니다. OMP는 명령으로 켜면 세션 동안 디자인 정책을 적용하고 작업 단계와 근거를 세션에 기록합니다. 다른 하네스는 같은 [워크플로 스킬](skills/ultradesign/SKILL.md)을 불러오는 얇은 진입점을 제공합니다.
 
-[시각 QA 가이드](skills/ultradesign/references/visual-qa.md)에는 Playwright 캡처와 점검 방법이 있습니다.
+[레퍼런스 단계](skills/ultradesign/prompts/01-references.md)에서 전체 화면과 주요 영역을 캡처하고 관찰합니다. 디자인 시스템 계약을 먼저 작성한 뒤 프로젝트 데이터로 재현하고 제품에 맞게 바꿉니다. 캡처와 재현본은 비공개로 보관합니다. [시각 QA 가이드](skills/ultradesign/references/visual-qa.md)에는 같은 너비로 비교할 실제 화면의 캡처 방법이 있습니다.
 
 ### OMP 설정
 
@@ -98,7 +98,7 @@ Use `/ud status` to see the checkpoint, `/ud resume` to continue, `/ud off` to d
 
 Implementation defaults to `openai-codex/gpt-6.2-sol` (`high`) and QA to `anthropic/claude-opus-4-6` (`high`). Set `ULTRADESIGN_MODEL=provider/model` and `ULTRADESIGN_THINKING_LEVEL=high` to change defaults for the current OMP process. `ULTRADESIGN_MODELS='{"qa":{"model":"provider/judge","thinkingLevel":"high"}}'` takes precedence per stage: `references`, `system`, `implementation`, `motion`, `qa`, `sharing`. Use models available to this OMP environment.
 
-When OMP's `task` is available, independent reference and QA work can run in parallel. OMP controls child models and permissions. For renderer setup, see the [visual QA guide](skills/ultradesign/references/visual-qa.md).
+When OMP's `task` is available, independent reference and QA work can run in parallel. OMP controls child models and permissions. See [reference capture](skills/ultradesign/prompts/01-references.md) for the private reference and recreation, and the [visual QA guide](skills/ultradesign/references/visual-qa.md) for the actual route.
 
 ### Blind evaluation
 

@@ -20,6 +20,9 @@
 
 - Spacing increment, scope and exceptions:
 - Surface, divider and grouping rules:
+- Alignment grid (bounds, tracks, gutters, edges or baselines):
+- Type roles (family, size / weight / line-height, responsive changes):
+- Density targets per width (row height, line length or visible content):
 
 ## Component contract (repeat)
 

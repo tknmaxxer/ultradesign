@@ -4,7 +4,7 @@ import { access, chmod, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFil
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { briefFor, criteria, tasks, widths } from "../evals/tasks.mjs";
-import { blindHtml, isolatedEnv, judgePrompt, ompArgs, parseArgs, parseJudge, rendererEnv, RpcClient, run, staticServer, validateChecks } from "../evals/run.mjs";
+import { blindHtml, isolatedEnv, judgePrompt, ompArgs, parseArgs, parseJudge, recordContract, rendererEnv, RpcClient, run, staticServer, validateChecks } from "../evals/run.mjs";
 
 const modelArgs = ["--builder-model", "builder/exact", "--judge-model", "judge/exact", "--out", "/tmp/new-eval"];
 const judgment = () => Object.fromEntries(["A", "B"].map(label => [label, {
@@ -22,9 +22,7 @@ test("fixed corpus contains four self-contained tasks with frozen data and exist
   assert.match(tasks[3].brief, /07:30 Morning walk/);
   for (const task of tasks) {
     assert.match(briefFor(task), /self-contained index\.html/);
-    assert.match(briefFor(task), /Work offline from the fixture/);
-    assert.match(briefFor(task), /evaluator owns all rendered QA after this turn/);
-    assert.match(briefFor(task), /Fixed pattern studies \(synthetic, supplied to both builds\)/);
+    assert.doesNotMatch(briefFor(task).slice(task.brief.length), /reference|pattern studies|\/ud|rendered QA/i);
   }
   assert.deepEqual(Object.keys(criteria), ["hierarchy", "spacing_consistency", "visual_consistency", "responsive", "polish"]);
 });
@@ -38,6 +36,9 @@ test("CLI requires exact distinct models, a new output, and valid task/deadline"
   assert.throws(() => parseArgs([...modelArgs, "--timeout", "NaN"]), /positive/);
   assert.throws(() => parseArgs([...modelArgs, "--timeout", "0"]), /positive/);
   assert.throws(() => parseArgs([...modelArgs, "--profile", "host"]), /Invalid/);
+  assert.throws(() => parseArgs([...modelArgs, "--subscription"]), /requires openai-codex/);
+  assert.throws(() => parseArgs([...modelArgs, "--condition", "treatment"]), /dashboard files-mode/);
+  assert.equal(parseArgs([...modelArgs, "--condition", "treatment", "--task", "dashboard"]).condition, "treatment");
   assert.deepEqual(parseArgs([...modelArgs, "--credential-env", "ONE_TOKEN", "--credential-env", "TWO_KEY"])["credential-env"], ["ONE_TOKEN", "TWO_KEY"]);
   assert.throws(() => parseArgs([...modelArgs, "--credential-env", "bad=value"]), /variable name/);
 });
@@ -68,10 +69,10 @@ test("only treatment explicitly loads the extension; baseline cannot discover co
   const toolsIndex = baseline.indexOf("--tools") + 1;
   assert.ok(toolsIndex > 0);
   assert.equal(baseline[toolsIndex], "read,write,edit");
-  assert.equal(treatment[toolsIndex], baseline[toolsIndex] + ",ultradesign_checkpoint");
+  assert.equal(treatment[toolsIndex], baseline[toolsIndex] + ",ultradesign_checkpoint,ud_eval_capture_reference,ud_eval_record_contract,ud_eval_render");
   assert.deepEqual(treatment.slice(0, toolsIndex), baseline.slice(0, toolsIndex));
-  assert.equal(treatment.length, baseline.length + 2);
-  assert.equal(treatment.at(-2), "-e");
+  assert.equal(treatment.filter(arg => arg === "-e").length, 2);
+  assert.match(treatment[treatment.indexOf("--append-system-prompt") + 1], /study\.html/);
   assert.equal(baseline.includes("-e"), false);
   for (const flag of ["--no-extensions", "--no-skills", "--no-rules", "--no-context-files", "--no-session"]) assert.ok(baseline.includes(flag));
   assert.equal(baseline[baseline.indexOf("--thinking") + 1], "high");
@@ -154,7 +155,7 @@ async function fixture(failure = "") {
   const root = await mkdtemp(join(tmpdir(), "ud-runner-test-"));
   const omp = join(root, "omp.mjs"), uv = join(root, "uv.mjs"), audit = join(root, "audit.jsonl");
   await writeFile(omp, `#!/usr/bin/env node
-import {appendFileSync,writeFileSync} from "node:fs";import{createInterface}from"node:readline";
+import {appendFileSync,mkdirSync,writeFileSync} from "node:fs";import{createInterface}from"node:readline";import{join}from"node:path";
 const args=process.argv.slice(2),model=args[args.indexOf("--model")+1],judge=model.startsWith("judge/");
 const emit=value=>console.log(JSON.stringify(value));
 createInterface({input:process.stdin}).on("line",line=>{
@@ -163,8 +164,20 @@ createInterface({input:process.stdin}).on("line",line=>{
  if(c.type==="get_available_commands")return emit({type:"response",id:c.id,success:true,data:{commands:args.includes("-e")?[{name:"ud"}]:[]}});
  appendFileSync(${JSON.stringify(audit)},JSON.stringify({args,model,judge,cwd:process.cwd(),home:process.env.HOME,prompt:c.message,images:c.images?.map(i=>Object.keys(i)),envKeys:Object.keys(process.env),thinking:process.env.ULTRADESIGN_THINKING_LEVEL})+"\\n");
  if(${JSON.stringify(failure)}==="builder"&&!judge)return emit({type:"response",id:c.id,success:false,error:"secret-token-should-not-escape"});
+ if(${JSON.stringify(failure)}==="quota"&&!judge){
+  writeFileSync("index.html","<main>Authored before quota stop</main>");
+  return emit({type:"message_end",message:{role:"assistant",stopReason:"error",errorMessage:"usage_limit_reached; overloaded; secret-token-should-not-escape"}});
+ }
+ if(${JSON.stringify(failure)}==="overloaded")return emit({type:"message_end",message:{role:"assistant",stopReason:"error",errorMessage:"529 overloaded; retry-after-ms: 0"}});
  const html="<!doctype html><html lang=en><title>Fixture</title><h1>Fixture</h1></html>";
  if(!judge&&!args.includes("--no-tools")&&${JSON.stringify(failure)}!=="unchanged")writeFileSync("index.html",html);
+ if(process.env.UD_EVAL_EVIDENCE&&${JSON.stringify(failure)}!=="no-evidence"){
+  writeFileSync("ud-notes.md","Private design QA notes");
+  const out=process.env.UD_EVAL_EVIDENCE;
+  writeFileSync(join(out,"design-contract-before-ui.md"),"Written contract fixture");
+  mkdirSync(join(out,"reference-1"));writeFileSync(join(out,"reference-1","pattern.md"),"Fixture pattern");
+  for(const dir of ["study-1","route-2","route-3"]){mkdirSync(join(out,dir));for(const width of [390,768,1440])writeFileSync(join(out,dir,width+".png"),"fixture");}
+ }
  emit({type:"response",id:c.id,success:true});
  emit({type:"message_end",message:{role:"assistant",provider:model.split("/")[0],model:model.slice(model.indexOf("/")+1),content:[{type:"text",text:judge?JSON.stringify(${JSON.stringify(judgment())}):args.includes("--no-tools")?html:"done"}]}});
  emit({type:"prompt_result",id:c.id,status:"completed",sessionSettled:true});
@@ -216,6 +229,33 @@ test("runner integrates isolated fresh builders, anonymous fresh judge, and sepa
   } finally { await rm(data.root, { recursive: true, force: true }); }
 });
 
+test("all four tasks publish one blind pair each after their serial builders and independent judge", async () => {
+  const data = await fixture();
+  try {
+    const htmlPath = await run({ ...data.options, task: "all" });
+    const calls = (await readFile(data.audit, "utf8")).trim().split("\n").map(JSON.parse);
+    const manifest = JSON.parse(await readFile(join(data.options.out, "private", "manifest.json")));
+    assert.deepEqual(manifest.tasks.map(task => task.id), ["dashboard", "landing", "settings", "mobile"]);
+    assert.equal(calls.length, 12);
+    assert.equal(new Set(calls.map(call => call.home)).size, 12);
+    for (let i = 0; i < tasks.length; i++) {
+      const [first, second, judge] = calls.slice(i * 3, i * 3 + 3);
+      const conditions = [first, second].map(call => call.prompt.startsWith("/ud ") ? "treatment" : "baseline");
+      assert.deepEqual(conditions, manifest.tasks[i].executionOrder);
+      assert.deepEqual([...conditions].sort(), ["baseline", "treatment"]);
+      for (const [index, call] of [first, second].entries()) {
+        const treated = conditions[index] === "treatment";
+        assert.equal(call.prompt, `${treated ? "/ud " : ""}${briefFor(tasks[i])}`);
+        assert.equal(call.envKeys.includes("UD_EVAL_EVIDENCE"), treated);
+      }
+      assert.equal(judge.judge, true);
+      assert.equal(judge.images.length, 6);
+      assert.match(judge.prompt, new RegExp(tasks[i].brief.slice(0, 25)));
+    }
+    assert.equal(((await readFile(htmlPath, "utf8")).match(/<img /g) ?? []).length, 24);
+  } finally { await rm(data.root, { recursive: true, force: true }); }
+});
+
 test("failed builder records its phase without stderr/secrets, publishes no report, and removes temporary HOME", async () => {
   const data = await fixture("builder");
   try {
@@ -251,12 +291,94 @@ test("HTML delivery uses tool-free builders and provides the canonical prompts o
   } finally { await rm(data.root, { recursive: true, force: true }); }
 });
 
+test("dashboard pilot preserves its private render without invoking baseline or judge", async () => {
+  const data = await fixture();
+  try {
+    const path = await run({ ...data.options, condition: "treatment" });
+    assert.equal(path, join(data.options.out, "private", "dashboard", "treatment"));
+    assert.match(await readFile(join(path, "attempt-1", "ud-notes.md"), "utf8"), /Private design QA/);
+    for (const width of widths) await access(join(path, `${width}.png`));
+    const calls = (await readFile(data.audit, "utf8")).trim().split("\n").map(JSON.parse);
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].prompt, /^\/ud /);
+    assert.deepEqual(await readdir(join(data.options.out, "blind")), []);
+  } finally { await rm(data.root, { recursive: true, force: true }); }
+});
+
+test("an actual usage-limit indication stops the run even when the error contains overload text", async () => {
+  const data = await fixture("quota");
+  try {
+    await assert.rejects(run(data.options), /subscription usage limit reached/);
+    const manifest = await readFile(join(data.options.out, "private", "manifest.json"), "utf8");
+    const { active, failureKind } = JSON.parse(manifest);
+    assert.equal(failureKind, "subscription-quota");
+    assert.match(await readFile(join(data.options.out, "private", "dashboard", active.condition, "attempt-1", "index.html"), "utf8"), /Authored before quota stop/);
+    assert.doesNotMatch(manifest, /secret-token/);
+    assert.equal((await readFile(data.audit, "utf8")).trim().split("\n").length, 1);
+  } finally { await rm(data.root, { recursive: true, force: true }); }
+});
+
+test("subscription overload uses the provider interval, serial fresh attempts, and a six-retry ceiling", async () => {
+  const data = await fixture("overloaded");
+  const original = { URL: process.env.OMP_AUTH_BROKER_URL, TOKEN: process.env.OMP_AUTH_BROKER_TOKEN };
+  process.env.OMP_AUTH_BROKER_URL = "http://127.0.0.1:1";
+  process.env.OMP_AUTH_BROKER_TOKEN = "test-oauth-broker-token";
+  try {
+    await assert.rejects(run({ ...data.options, subscription: true, condition: "treatment" }), /temporarily overloaded/);
+    const manifest = JSON.parse(await readFile(join(data.options.out, "private", "manifest.json"), "utf8"));
+    assert.equal(manifest.failureKind, "provider-overload");
+    assert.equal(manifest.overloadRetries.length, 6);
+    assert.ok(manifest.overloadRetries.every(entry => entry.retryAfterMs === 0 && entry.providerInterval));
+    const calls = (await readFile(data.audit, "utf8")).trim().split("\n").map(JSON.parse);
+    assert.equal(calls.length, 7);
+    assert.equal(new Set(calls.map(call => call.home)).size, 7);
+    assert.ok(calls.every(call => call.prompt.startsWith("/ud ")));
+  } finally {
+    for (const [name, value] of Object.entries(original)) {
+      if (value === undefined) delete process.env[`OMP_AUTH_BROKER_${name}`];
+      else process.env[`OMP_AUTH_BROKER_${name}`] = value;
+    }
+    await rm(data.root, { recursive: true, force: true });
+  }
+});
+
+test("files treatment cannot pass with final HTML but without study/QA evidence", async () => {
+  const data = await fixture("no-evidence");
+  try {
+    await assert.rejects(run({ ...data.options, condition: "treatment" }), /Treatment missing a completed public capture/);
+  } finally { await rm(data.root, { recursive: true, force: true }); }
+});
+
 test("an unchanged settings seed is not a finished build", async () => {
   const data = await fixture("unchanged");
   try {
     await assert.rejects(run({ ...data.options, task: "settings" }), /did not produce a finished index\.html/);
     assert.deepEqual(await readdir(join(data.options.out, "blind")), []);
   } finally { await rm(data.root, { recursive: true, force: true }); }
+});
+
+test("the recorded design contract precedes every authored screen file and preserves an untouched settings seed", async () => {
+  const root = await mkdtemp(join(tmpdir(), "ud-contract-test-"));
+  const project = join(root, "project"), evidence = join(root, "evidence");
+  const seed = tasks.find(task => task.id === "settings").seed;
+  const name = join(project, "design-contract.md");
+  const contract = "# Design contract\n\n## Layout\nAligned columns\n\n## System\n4px grid\n\n## Component contract (repeat)\nField states\n\n## Verification matrix\n390px\n";
+  try {
+    await mkdir(project); await mkdir(evidence);
+    await writeFile(join(project, "index.html"), seed);
+    await writeFile(name, contract.replace("Field states", ""));
+    await assert.rejects(recordContract(project, evidence, seed), /Complete the Component contract/);
+    await writeFile(name, contract);
+    await writeFile(join(project, "study.html"), "<main>Too early</main>");
+    await assert.rejects(recordContract(project, evidence, seed), /before implementing/);
+    await rm(join(project, "study.html"));
+    await writeFile(join(project, "index.html"), "<main>Too early</main>");
+    await assert.rejects(recordContract(project, evidence, seed), /before implementing/);
+    await writeFile(join(project, "index.html"), seed);
+    const recorded = await recordContract(project, evidence, seed);
+    assert.equal(await readFile(recorded, "utf8"), contract);
+    await assert.rejects(recordContract(project, evidence, seed), /EEXIST/);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test("static server serves only fixture files, including when a fixture symlink escapes its root", async () => {

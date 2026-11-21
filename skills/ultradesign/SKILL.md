@@ -6,7 +6,7 @@ description: Plan, implement, or visually review an interface through reference 
 # Ultradesign
 
 <!-- omp-policy:start -->
-Choose the workflow for the user's request: **plan** yields a design contract and verification plan; **review** yields prioritized findings from the current result; **implement** carries the work through rendered verification. Study many references by need, reconstruct the strongest patterns as studies, then adapt each decision to the product. Set tokens and component variants before building. Start new spacing systems on a 4px grid; follow established systems within the agreed migration scope. Let type and spacing establish hierarchy, use quiet dividers and purposeful elevation, and express repeated needs as component variants. Build with accessible primitives, give motion its own pass, and verify real tasks at desktop, tablet, mobile, and layout transitions. Prepare a shared system only when another consumer needs it.
+Choose the workflow for the user's request: **plan** yields a design contract and verification plan; **review** yields prioritized findings from the current result; **implement** carries the work through rendered verification. Capture and inspect real, relevant references without writing UI code. Record the design system contract before building any screen, including the private recreation. Derive palette, explicit type metrics, alignment and density from the product and the evidence. Start new spacing systems on a 4px grid; follow established systems within the agreed migration scope. Group with type, alignment, space and hairlines, give repeated controls component variants, and reserve at most one elevation treatment for a purposeful floating layer. With the contract in place, recreate the lead reference's treatment with project data, then adapt it piece by piece. Give motion its own pass. At matched viewport widths, compare the actual route and reference, list concrete differences, fix unintentional ones, and recapture. Prepare a shared system only when another consumer needs it.
 <!-- omp-policy:end -->
 
 ## Start here
@@ -25,9 +25,9 @@ Read each prompt when its stage starts. Carry its output into the next stage as 
 
 | Stage | Input cue | Required handoff |
 | --- | --- | --- |
-| [1 · References](prompts/01-references.md) | Product job and any supplied material | Candidate scan, reconstructed patterns, chosen direction and adaptations |
-| [2 · Design system](prompts/02-system.md) | Selected patterns and existing project conventions | Layout, tokens, component contracts and acceptance checks |
-| [3 · Implementation](prompts/03-implementation.md) | Design contract and real content | Running route, mapped component variants and state paths |
+| [1 · References](prompts/01-references.md) | Product job and any supplied material | Actual captures, measured pattern notes and proposed adaptations; no UI code |
+| [2 · Design system](prompts/02-system.md) | Selected patterns and existing project conventions | Written layout, tokens, component contracts and acceptance checks before any UI code |
+| [3 · Implementation](prompts/03-implementation.md) | Written design contract and real content | Private recreation, rendered comparison, then running adapted route and state paths |
 | [4 · Motion](prompts/04-motion.md) | Usable static flow and transitions | Trigger/state motion spec and reduced-motion behavior |
 | [5 · Visual QA](prompts/05-visual-qa.md) | Renderable route, tasks, states and motion spec | Recorded viewport and flow evidence, findings and fix reruns |
 | [6 · Sharing](prompts/06-sharing.md) | Verified components and named consumers | System docs, preview and consumer-verified package as scoped |

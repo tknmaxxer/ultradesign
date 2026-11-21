@@ -3,33 +3,46 @@
 Run from the repository root with Node, OMP 19 RPC, uv, and an installed Chromium:
 
 ```sh
+export OMP_AUTH_BROKER_URL=http://127.0.0.1:8765
+export OMP_AUTH_BROKER_TOKEN="$(omp auth-broker token)"
 UD_CHROMIUM_PATH=/usr/bin/google-chrome \
 node evals/run.mjs \
-  --builder-model inferhub/cbcn/glm-5.3-flash \
-  --judge-model inferhub/gpt-6.2-sol \
-  --model-config "$HOME/.omp/agent/models.yml" \
-  --out /tmp/ultradesign-eval-dashboard \
-  --task dashboard
+  --subscription \
+  --builder-model openai-codex/gpt-6.2-sol --builder-thinking high --builder-output files \
+  --judge-model anthropic/claude-opus-5-5 \
+  --out /tmp/ultradesign-eval
 ```
 
+For `--subscription`, run `omp auth-broker serve --bind=127.0.0.1:8765` in a
+separate terminal with those providers' OAuth subscriptions already signed in.
+Do not print or share the broker token. The runner accepts only Codex and
+Anthropic in this mode and does not pass through API keys or custom models.
+
 The output directory must not exist. Omit `--task` to run all four fixed briefs:
-dashboard, landing, settings, and mobile. `--timeout 900` is the default per
+dashboard, landing, settings, and mobile. `--timeout 1800` is the default per
 builder, judge, and renderer deadline. Both model identifiers must be explicit
 `provider/model` selectors, and the judge must differ from the builder and accept
 image inputs. The example models and paths are local configuration choices, not
 bundled services or guaranteed available models.
 
-Each condition receives identical content, seed files, and synthetic offline
-pattern studies. This keeps live reference access outside the benchmark. Both
-use the same `--builder-thinking` effort (default: `high`) and identical
-builder/stage model settings, with local
-file tools. The runner, rather than the builder session, executes the browser.
-Only treatment loads the OMP extension, gains its
-checkpoint tool, and invokes `/ud`. Run order and A/B assignment are independently
+Baseline receives only the plain task brief and seed files. Both conditions
+use the same `--builder-thinking` effort (default: `high`) and builder/stage
+model settings, with local file tools. Only treatment invokes `/ud`, chooses
+and captures public references, records its design system contract before writing
+screen code, renders a private recreation with the task's data, then adapts and
+verifies the actual route. The runner independently
+captures the final route in both conditions. Run order and A/B assignment are independently
 randomized per task. Each builder and visual judge has a fresh temporary HOME,
 agent directory, and project; automatic context files, extensions, rules, and
 skills are disabled. The judge has no tools and receives only the brief plus six
 anonymous full-page screenshots at 390, 768, and 1440 px.
+
+Use `--task dashboard --condition treatment` in files mode for a treatment-only
+calibration run. It keeps the renders, patterns and QA notes private and
+does not invoke a judge. Use a fresh `--out` for each calibration and for the
+final comparison. Calls are serialized; subscription usage-limit errors stop
+without fallback. Only explicit overloads are retried, up to six times, using
+the provider's retry interval when supplied.
 
 Use `--builder-output html` for a bounded smoke of the `/ud` policy and canonical
 prompts through final rendering and blind judging. Both builders then return a
@@ -64,7 +77,11 @@ them before opening the separate `scores.html`. The owner page contains no model
 scores or rationales. `scores.json` contains the anonymous score table.
 `OUT/private/manifest.json` contains model identifiers, randomized mappings,
 execution order, brief/image hashes, completion status, and failure phase.
-Raw renderer checks are private too. Serve only `OUT/blind`, never its parent.
+Raw renderer checks, per-condition final HTML and renders, and treatment's
+captured references, recreated study and design/QA notes live below
+`OUT/private`. Completed conditions and partial treatment evidence survive
+aborted runs; a partial run publishes no owner comparison. Serve only
+`OUT/blind`, never its parent.
 
 The six axes are hierarchy, spacing consistency, component consistency/reuse
 **visual proxy**, responsiveness, polish, and motion presence. A fresh judge

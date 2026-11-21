@@ -5,15 +5,10 @@ export const criteria = Object.freeze({
   spacing_consistency: "Coherent rhythm, repeated spacing relationships, and aligned edges within and across sections.",
   visual_consistency: "Repeated buttons, cards, fields, and navigation share coherent anatomy, color, and states (a visual component-reuse proxy, not proof of source-code reuse).",
   responsive: "Useful composition without clipping or unreadably compressed content at all three supplied widths.",
-  polish: "Deliberate, coherent typography, color, surfaces, details, and complete presentation of the required content.",
+  polish: "Deliberate, coherent typography, color, surfaces and details that fit this product's task and content; complete presentation of required content. Originality alone is not quality.",
 });
 
-const delivery = `Deliver a finished, self-contained index.html with browser-native HTML/CSS/JavaScript and optional local assets. Work offline from the fixture and pattern studies below. Use file tools directly. Implement the requested interactions, keyboard focus, accessible labels, and reduced motion. Preserve existing design tokens. Keep design decisions and motion notes concise and inline in this session. The evaluator owns all rendered QA after this turn, including 390/768/1440 px and the primary action. Stop after writing the implementation and reviewing its source and motions; hand off rendered QA as pending without attempting to start a server or test in a browser. Keep notes out of the rendered page.
-
-Fixed pattern studies (synthetic, supplied to both builds):
-- Task-first shell: persistent navigation and aligned data groups on wide screens; compact navigation and content in task order on narrow screens. Keep key actions beside their content while secondary controls reflow.
-- Content-first composition: pair one task or promise with concrete evidence and a clear primary action; use type order and breathing room to connect them. Stack the same pieces in reading order on narrow screens.
-- Stateful control: an inline control keeps its label and gives visible result feedback; a dialog moves focus into the task and returns focus to its opener on dismissal. A short state transition can explain the change, with an immediate equivalent under reduced motion.`;
+const delivery = `Deliver a finished, self-contained index.html with browser-native HTML/CSS/JavaScript and optional local assets. Implement the requested interactions, keyboard focus, accessible labels and reduced motion. Preserve any existing design tokens. Keep working notes out of the rendered page.`;
 
 export const tasks = Object.freeze([
   {
