@@ -1,0 +1,9 @@
+{
+  "omp": ["package.json"],
+  "claude": ["commands/ud.md"],
+  "codex": ["skills/ud/SKILL.md"],
+  "antigravity": ["plugin.json", "skills/ud/SKILL.md"],
+  "opencode": ["commands/ud.md", "commands/ultradesign.md"],
+  "cursor": ["skills/ud/SKILL.md"],
+  "gemini": ["commands/ud.toml", "commands/ultradesign.toml", "gemini-extension.json"]
+}

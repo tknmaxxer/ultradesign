@@ -1,0 +1,14 @@
+{
+  "name": "ultradesign",
+  "version": "0.1.0",
+  "description": "Reference-led design workflow with a thin OMP adapter.",
+  "type": "module",
+  "files": ["adapters/", "skills/"],
+  "omp": {
+    "extensions": ["./adapters/omp/index.ts"]
+  },
+  "scripts": {
+    "test": "bun test",
+    "test:host": "bun tests/omp-host.mjs"
+  }
+}
