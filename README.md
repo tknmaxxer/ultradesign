@@ -1,105 +1,114 @@
-# Ultradesign v0.2
+# Ultradesign v0.4
 
 [한국어](#한국어) · [English](#english)
 
 ## 한국어
 
-Ultradesign은 레퍼런스 탐색을 실제 화면으로 이어 주는 디자인 워크플로입니다. 여러 사례에서 잘 작동하는 부분을 재현해 본 다음, 제품에 맞게 하나씩 바꿉니다. 토큰과 컴포넌트 계약을 먼저 정하고, 구현·모션·실화면 검증을 별개 단계로 진행합니다.
+레퍼런스는 에이전트가 모으고, 어떤 디자인이 맞는지는 사람이 고릅니다. 고른 화면을 바탕으로 시스템을 만들고, 확인받은 뒤 실제 UI를 구현하고 검증합니다.
 
-### 설치
+### 시작하기
 
-이 저장소의 로컬 체크아웃과 Node.js가 필요합니다. **설치할 프로젝트**에서 아래 명령을 실행하세요. 전역 설치는 `--scope user`를 사용합니다. 실행 중인 하네스는 설치 후 다시 시작하세요.
+Node.js와 로컬 체크아웃이 필요합니다. **작업할 프로젝트**에서 설치한 뒤 하네스를 다시 열어 주세요.
 
 ```sh
 node /path/to/ultradesign/scripts/adapters.mjs install omp --scope project
 ```
 
-위 명령의 `omp`를 대상 하네스 이름으로 바꾸면 됩니다.
-
-| 하네스 이름 | 호출 | 프로젝트 / 사용자 설치 경로 |
-| --- | --- | --- |
-| `omp` | `/ud`, `/ultradesign` | `.omp/extensions/ultradesign/` / `~/.omp/agent/extensions/ultradesign/` |
-| `claude` (Claude Code) | `/ud`, `/ultradesign` | `.claude/` / `~/.claude/` |
-| `codex` | `$ud`, `$ultradesign` | `.agents/skills/` / `~/.agents/skills/` |
-| `antigravity` (`agy`) | `/ud`, `/ultradesign` | `.agents/skills/` / `~/.gemini/config/skills/` |
-| `opencode` | `/ud`, `/ultradesign` | `.opencode/` / `~/.config/opencode/` |
-| `cursor` | `/ud`, `/ultradesign` | `.cursor/skills/` / `~/.cursor/skills/` |
-| `gemini` (Gemini CLI) | `/ud`, `/ultradesign` | `.gemini/` / `~/.gemini/` |
-
-OMP에서 설치 없이 한 세션만 쓰려면 `omp -e /path/to/ultradesign`으로 실행하세요. 배포용 파일이 필요하면 체크아웃에서 `node scripts/adapters.mjs generate all`로 `dist/`에 생성합니다. 설치기는 동일한 파일을 재사용하고, 내용이 다른 기존 파일을 발견하면 경로를 알리고 중단합니다.
-
-### 사용
-
-하네스의 입력창에 호출 이름과 과제를 한 메시지로 입력합니다. Codex에서는 `/ud` 대신 `$ud`를 사용합니다.
+`omp` 대신 `claude`, `codex`, `antigravity`, `opencode`, `cursor`, `gemini`를 지정할 수 있습니다. `--scope user`는 사용자 범위에 설치합니다. 기존 파일과 내용이 다르면 설치기가 경로를 알리고 멈춥니다. 이전 버전은 사용자 변경을 보존한 별도 위치에서 먼저 확인하세요. 한 OMP 세션에서만 쓰려면 `omp -e /path/to/ultradesign`으로 실행합니다.
 
 ```text
-/ud 계획만: 주문 목록에 모바일 필터를 추가하는 UI를 설계해줘.
-/ud 리뷰: 현재 결제 화면에서 모바일 사용자가 막히는 곳을 찾아줘.
-/ud 구현: 팀 대시보드의 다음 행동을 명확히 하고 세 화면 너비에서 검증해줘.
+/ud 구현: 우리 제품의 랜딩 첫 화면을 개선해줘. 현재 카피, 제품 이미지, 시작하기 링크는 유지해.
 ```
 
-계획은 디자인 계약과 확인 기준, 리뷰는 우선순위가 있는 관찰 결과, 구현은 동작하는 UI와 검증 근거를 남깁니다. OMP는 명령으로 켜면 세션 동안 디자인 정책을 적용하고 작업 단계와 근거를 세션에 기록합니다. 다른 하네스는 같은 [워크플로 스킬](skills/ultradesign/SKILL.md)을 불러오는 얇은 진입점을 제공합니다.
+OMP·Claude Code·Antigravity·OpenCode·Cursor·Gemini CLI에서는 `/ud` 또는 `/ultradesign`, Codex에서는 `$ud` 또는 `$ultradesign`을 씁니다. `계획만`은 시스템 제안에서 멈추고, `리뷰`는 현재 화면의 QA 결과를 보고합니다. 두 모드 모두 앱 코드를 수정하지 않습니다.
 
-[레퍼런스 단계](skills/ultradesign/prompts/01-references.md)에서 전체 화면과 주요 영역을 캡처하고 관찰합니다. 디자인 시스템 계약을 먼저 작성한 뒤 프로젝트 데이터로 재현하고 제품에 맞게 바꿉니다. 캡처와 재현본은 비공개로 보관합니다. [시각 QA 가이드](skills/ultradesign/references/visual-qa.md)에는 같은 너비로 비교할 실제 화면의 캡처 방법이 있습니다.
+### 진행 순서
 
-### OMP 설정
+1. 실제 제품, 화면, 콘텐츠와 사용자의 핵심 과업을 확인합니다.
+2. 핵심 갤러리와 화면에 맞는 공개 출처를 살펴 번호가 붙은 보드를 만듭니다. 사용자가 1–3개를 고릅니다.
+3. 방향·폰트·팔레트·상태 표시·밀도를 한 번에 하나씩 묻습니다. 각 선택지에 실제 근거를 붙이고 추천과 사용자 결정을 따로 기록합니다.
+4. 선택을 Google Labs 형식 `DESIGN.md`에 반영하고 `tokens.css`를 생성합니다. 실제 컴포넌트 변형이 보이는 `/system`을 사용자에게 확인받습니다. 신규 프로젝트의 기본은 Vite + React, Base UI, CSS Modules입니다. 기존 스택은 유지합니다.
+5. 고른 레퍼런스의 구도를 우리 컴포넌트로 먼저 재현합니다. 다음 샷에서 실제 콘텐츠와 동작을 연결하고 불필요한 시각 요소를 덜어냅니다.
+6. [Remorsearch UX QA](https://github.com/remorser58/remorsearch_ux_qa_skill)로 데스크톱·태블릿·휴대폰의 과업을 점검합니다. 기준선 이후 같은 시나리오에서 수정·재실행을 최대 세 번 반복합니다. 외부 스킬이 없으면 로컬 검증으로 진행하고 범위 차이를 명시합니다.
+7. 실제 화면과 QA 근거를 보여주고 최종 확인을 받습니다. 모션은 요청이 있을 때 별도로 검증합니다.
 
-`/ud status`로 현재 단계, `/ud resume`으로 이어서 작업, `/ud off`로 비활성화를 요청합니다. 공용 시스템을 준비할 때는 `/ud --shared <과제>`를 사용합니다. OMP가 단계 완료와 근거를 저장하므로 같은 세션을 다시 열면 그 단계부터 이어갑니다.
+![Cataly Ops /system의 시맨틱 색과 타이포그래피 견본](assets/readme/system-foundations.png)
 
-기본 구현 모델은 `openai-codex/gpt-6.2-sol` (`high`), QA는 `anthropic/claude-opus-4-6` (`high`)입니다. 사용할 수 있는 모델로 바꾸려면 OMP를 시작할 때 아래 환경변수를 설정합니다.
+![Cataly 레인 상태 화면: 상태 기호, 검색과 선택 행, 마지막 보고 패널](assets/readme/exp2-lanes.png)
 
-- `ULTRADESIGN_MODEL=provider/model`, `ULTRADESIGN_THINKING_LEVEL=high`: 모든 단계의 공통 기본값.
-- `ULTRADESIGN_MODELS='{"qa":{"model":"provider/judge","thinkingLevel":"high"}}'`: 단계별 우선 설정. 키는 `references`, `system`, `implementation`, `motion`, `qa`, `sharing`입니다.
+`/system`의 색·글자 견본과 승인된 Cataly Ops 화면 예시입니다. 원본 연구 렌더에서 필요한 영역을 잘라 내고 개인 보고 내용을 가렸습니다.
 
-OMP의 `task`가 사용 가능한 환경에서는 레퍼런스 조사와 시각 QA를 각각 독립 작업으로 병렬화합니다. 자식의 모델과 권한은 OMP 설정을 따릅니다.
+### OMP에서 결정 기록하기
 
-### 블라인드 평가
-
-OMP, `uv`, Chromium과 접근 가능한 구현 모델 및 별도 이미지 심사 모델이 필요합니다. 체크아웃에서 다음을 실행하면 고정 과제 하나를 `/ud` 적용 전후로 비교합니다. `--task`를 빼면 4개 과제를 모두 실행합니다. 모델별로 출력 디렉터리를 다르게 지정하세요.
-
-```sh
-node evals/run.mjs --task dashboard --builder-model "$BUILDER_MODEL" \
-  --judge-model "$JUDGE_MODEL" --out eval-results/dashboard-smoke
+```text
+/ud pick 2,5 정보 구조는 2번, 행동 버튼 위계는 5번
+/ud answer direction 2
+/ud approve system
+/ud approve final
 ```
 
-두 모델은 `provider/model`로 지정합니다. 사용자 정의 공급자를 쓰려면 `--model-config /path/to/models.yml`을 추가하세요. 채점과 조건을 보기 전에 `blind/index.html`에서 A/B를 비교합니다. 평가가 측정하는 것과 측정하지 않는 것은 [평가 안내](evals/README.md)를 참고하세요.
+현재 단계와 질문은 `/ud status` 또는 `/ud resume`으로 확인합니다. `/ud revise <gate-id> <피드백>`은 같은 게이트에서 다시 검토하고, `/ud off`는 정책을 끕니다. `--motion`은 최종 확인 전 모션 패스를, `--shared`는 확인 후 공용 시스템 패키징을 추가합니다. v0.3 이전 세션에서는 저장된 근거를 보존하고 새 `/ud` 작업으로 시작합니다. 다른 하네스는 작업 기록과 대화에서 같은 결정 순서를 따릅니다.
 
 ## English
 
-Ultradesign is a design workflow for turning reference studies into a verified interface. Reconstruct the strongest patterns to understand why they work, then adapt them piece by piece. Define tokens and component contracts first. Build, choreograph motion, and inspect the rendered result in separate passes.
+The agent does the research and implementation. You choose the references and approve what gets built.
 
-### Install
+### Start
 
-Use a local checkout and Node.js. From the **project you want to use**, run:
+Use Node.js and a local checkout. Run the [installation command](#시작하기) from the target project, then restart your harness. Pass `--scope user` for user-wide installation. The installer refuses to overwrite different files; test an upgrade in a fresh directory or retain your customizations first. For one OMP session, run `omp -e /path/to/ultradesign`.
 
-```sh
-node /path/to/ultradesign/scripts/adapters.mjs install omp --scope project
-```
-
-Replace `omp` with `claude`, `codex`, `antigravity`, `opencode`, `cursor`, or `gemini` as needed. See the [host paths above](#설치); `--scope user` installs for the current user. Restart the host after installation. Identical files are reused; differing existing files are left untouched.
-
-For one OMP session without installing, run `omp -e /path/to/ultradesign`. To generate bundles under `dist/`, run `node scripts/adapters.mjs generate all` from the checkout.
-
-### Use
-
-Enter the alias and task in the same chat message: `/ud` or `/ultradesign`; in Codex use `$ud` or `$ultradesign`.
+Use `/ud` or `/ultradesign` in OMP, Claude Code, Antigravity, OpenCode, Cursor, and Gemini CLI; use `$ud` or `$ultradesign` in Codex.
 
 ```text
-/ud Plan only: design mobile filters for the order list.
-/ud Review the current checkout for blockers on mobile.
-/ud Implement a clearer next action on the team dashboard and verify three widths.
+/ud Implement a clearer landing hero. Keep the current copy, product artwork, and Get Started destination.
 ```
 
-Plan returns a design contract and acceptance checks. Review reports prioritized observations. Implement delivers working UI and rendered evidence. In OMP the command activates session-long design guidance and remembers stage checkpoints. Other hosts load the same [workflow skill](skills/ultradesign/SKILL.md) through thin entry points.
+`plan` ends at a system proposal. `review` runs a read-only QA baseline on the current screen.
 
-### OMP settings
+### Workflow
 
-Use `/ud status` to see the checkpoint, `/ud resume` to continue, `/ud off` to deactivate, or `/ud --shared <task>` to include system sharing. Reopening the same session restores its checkpoint.
+1. Frame the real product, screen, content and user tasks.
+2. Review a numbered board of task-specific references. Pick one to three and say what to keep.
+3. Answer one evidence-backed question at a time: direction, type, palette, status treatment and density. The agent recommends one option and records your decision.
+4. Review the live `/system` built from Google Labs `DESIGN.md` and generated tokens. New projects start with Vite + React, Base UI and CSS Modules; existing projects keep their stack.
+5. Reconstruct the reference with your components, then adapt it to real content and behavior. Simplify visual grouping in the second shot.
+6. Replay real UX tasks at desktop, tablet and phone sizes with Remorsearch. Fix and rerun the same scenarios in up to three rounds after the baseline. Without the external skill, the local fallback reports what it could check.
+7. Confirm the current build in the final review. Motion is a separate, opt-in pass.
 
-Implementation defaults to `openai-codex/gpt-6.2-sol` (`high`) and QA to `anthropic/claude-opus-4-6` (`high`). Set `ULTRADESIGN_MODEL=provider/model` and `ULTRADESIGN_THINKING_LEVEL=high` to change defaults for the current OMP process. `ULTRADESIGN_MODELS='{"qa":{"model":"provider/judge","thinkingLevel":"high"}}'` takes precedence per stage: `references`, `system`, `implementation`, `motion`, `qa`, `sharing`. Use models available to this OMP environment.
+See the [/system and approved screen examples](#진행-순서) above.
 
-When OMP's `task` is available, independent reference and QA work can run in parallel. OMP controls child models and permissions. See [reference capture](skills/ultradesign/prompts/01-references.md) for the private reference and recreation, and the [visual QA guide](skills/ultradesign/references/visual-qa.md) for the actual route.
+### OMP checkpoints
 
-### Blind evaluation
+Use `/ud pick 2,5 [why]`, `/ud answer direction 2`, `/ud approve system`, and `/ud approve final` at the corresponding gates. Use `/ud revise <gate-id> <feedback>` to request an updated artifact. `/ud status` reads the checkpoint, `/ud resume` returns to it, and `/ud off` deactivates the workflow. Optional `--motion` adds a pass before final review; `--shared` prepares sharing after approval. Start a new workflow when upgrading earlier sessions; legacy progress does not count as v0.4 approval.
 
-With OMP, `uv`, Chromium, and two available models (a builder and a distinct image-capable judge), use the [command above](#블라인드-평가) for a one-task A/B smoke. Omit `--task` for the four tasks, and choose a new output directory for each builder model. Open `blind/index.html` before looking at the scores or condition map. See the [evaluation guide](evals/README.md) for scoring and limitations.
+OMP keeps stage-routing settings: `ULTRADESIGN_MODEL` and `ULTRADESIGN_THINKING_LEVEL` set common defaults. `ULTRADESIGN_MODELS='{"qa":{"model":"provider/judge","thinkingLevel":"high"}}'` overrides by stage (`frame`, `references`, `interview`, `system`, `implementation`, `qa`, `motion`, `final`, `sharing`). Default build routing is Sol 6.2 high; QA uses Opus 4.6 high. Use models available to your harness.
+
+## Tools
+
+Run the tools below from the checkout. Installed adapters carry the same tools in the canonical skill's `scripts/` directory; invoke those files with `uv run --script`.
+
+```sh
+scripts/reference-board 'developer tool landing hero' --kind mood --platform web --screenshot
+scripts/palette-board --input palettes.json --out palette.html
+scripts/design-tokens DESIGN.md --out src/tokens.css --catalog src/catalog.generated.json
+scripts/design-lint DESIGN.md
+```
+
+With permission to use the owner's Chrome, add `--cdp http://127.0.0.1:9222` and repeat `--candidate URL "What to compare"` for eligible first-party pages. The tool opens fresh read-only tabs and records access gaps. Manual-only sources stay browse links. With no CDP connection the public adapters work independently. Keep the board, sourced captures and interview artifacts private. Install `uv` and Playwright Chromium for rendering, and use the upstream Google Labs CLI for lint. Details: [workflow](skills/ultradesign/SKILL.md) · [source catalog](skills/ultradesign/references/catalog.md) · [method notes](references/method-trace.md).
+
+소유자가 명시적으로 허용한 실제 제품 화면은 `--target-url URL`로 추가합니다. 비교 후보와 분리해서 캡처하며, 해당 URL에만 `robots.txt` 검사 예외를 적용합니다. 제3자 출처의 정책과 브라우저 접근 제한은 유지합니다.
+
+Add `--target-url URL` for each explicitly authorized product page. Current-screen captures are separate from picks. Only those exact URLs are exempt from robots checks; third-party policies and browser access checks remain in force.
+
+## Verification
+
+```sh
+bun test
+bun run test:host
+node tests/visual-qa-smoke.mjs
+skills-ref validate skills/ultradesign
+node scripts/adapters.mjs generate all --out dist/v0.4.0
+git diff --check
+```
+
+Generated adapters are local bundles, not published packages. The [historical one-shot evals](evals/README.md) are retained for v0.1–v0.3 provenance; they do not measure v0.4.
