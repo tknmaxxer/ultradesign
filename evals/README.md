@@ -1,4 +1,10 @@
-# Rendered-artifact evaluation
+# Historical evaluation: v0.1–v0.3
+
+These files document the old, model-selected A/B workflow. The runner does not
+evaluate v0.4: it has no human reference picks, interview, or `/system` gate.
+Use the historical checkout at `6790ca1` for a runnable comparison, not the
+current extension. The commands below record the old method. The [inline fixture](workflow-v03.txt) preserves the old guidance for the transport tests. The [current
+verification](../README.md#verification) checks the human-guided workflow.
 
 Run from the repository root with Node, OMP 19 RPC, uv, and an installed Chromium:
 

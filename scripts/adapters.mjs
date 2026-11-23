@@ -28,6 +28,7 @@ function requireHost(host) {
 
 export async function adapterFiles(host, { root = repository } = {}) {
   requireHost(host);
+  const { name: packageName, version, description } = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
   const files = new Map();
   const internal = host === 'gemini' || host === 'opencode';
   const skillName = internal ? 'ultradesign-workflow' : 'ultradesign';
@@ -38,11 +39,10 @@ export async function adapterFiles(host, { root = repository } = {}) {
     files.set(`skills/${skillName}/${name}`, content);
   }
   const pointer = `../skills/${skillName}/SKILL.md`;
-  const command = `---\ndescription: Run the Ultradesign workflow\n---\n\nRead [the canonical Ultradesign workflow](${pointer}) relative to this command file, then follow it for the user's task.\n\nUser task: $ARGUMENTS\n`;
+  const command = `---\ndescription: Run the Ultradesign workflow\n---\n\nRead [the canonical Ultradesign workflow](${pointer}) relative to this command file. Start or resume the user's task from its recorded stage, keeping explicit human decisions at each taste gate.\n\nUser task: $ARGUMENTS\n`;
   if (host === 'omp') {
-    const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
     files.set('package.json', json({
-      name: pkg.name, version: pkg.version, type: 'module',
+      name: packageName, version, type: 'module',
       omp: { extensions: ['./adapters/omp/index.ts'], skills: ['./skills'] },
     }));
     for (const [name, bytes] of await tree(path.join(root, 'adapters/omp'))) {
@@ -53,17 +53,17 @@ export async function adapterFiles(host, { root = repository } = {}) {
   } else if (internal) {
     for (const name of ['ud', 'ultradesign']) {
       files.set(`commands/${name}.${host === 'gemini' ? 'toml' : 'md'}`, host === 'gemini'
-        ? `description = "Run the Ultradesign workflow"\nprompt = """\nRead the installed ultradesign-workflow skill and follow its SKILL.md for the user's task. Resolve its resources relative to that skill directory.\n\nUser task: {{args}}\n"""\n`
+        ? `description = "Run the Ultradesign workflow"\nprompt = """\nRead the installed ultradesign-workflow SKILL.md and resolve its resources relative to that skill directory. Start or resume at the recorded stage, keeping explicit human decisions at each taste gate.\n\nUser task: {{args}}\n"""\n`
         : command);
     }
   } else {
-    files.set('skills/ud/SKILL.md', '---\nname: ud\ndescription: Run the Ultradesign design and implementation workflow.\n---\n\nRead [the canonical Ultradesign workflow](../ultradesign/SKILL.md) relative to this skill directory and follow it for the task in the current user message. Preserve the complete task, including spaces, quotes, and non-English text.\n');
+    files.set('skills/ud/SKILL.md', '---\nname: ud\ndescription: Run the human-guided Ultradesign workflow.\n---\n\nRead [the canonical Ultradesign workflow](../ultradesign/SKILL.md) relative to this skill directory. Carry the current user task through its recorded stage and wait for explicit human decisions at taste gates. Preserve the complete task, including spaces, quotes, and non-English text.\n');
   }
   if (host === 'antigravity') {
-    files.set('plugin.json', json({ name: 'ultradesign', version: '0.1.0', description: 'Reference-led design workflow', skills: './skills/' }));
+    files.set('plugin.json', json({ name: packageName, version, description, skills: './skills/' }));
   }
   if (host === 'gemini') {
-    files.set('gemini-extension.json', json({ name: 'ultradesign', version: '0.1.0' }));
+    files.set('gemini-extension.json', json({ name: packageName, version }));
   }
   return new Map([...files].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0));
 }
@@ -133,10 +133,13 @@ export async function install(host, { scope, cwd, home, root = repository } = {}
 export async function main(args = process.argv.slice(2)) {
   const [action, host, ...options] = args;
   if (action === 'generate' && options.length === 0) return generate(host ?? 'all');
+  if (action === 'generate' && options.length === 2 && options[0] === '--out' && options[1] && !options[1].startsWith('--')) {
+    return generate(host, { outDir: path.resolve(options[1]) });
+  }
   if (action === 'install' && host && options.length === 2 && options[0] === '--scope') {
     return install(host, { scope: options[1] });
   }
-  throw new Error('Usage: node scripts/adapters.mjs generate [host|all]\n       node scripts/adapters.mjs install <host> --scope project|user');
+  throw new Error('Usage: node scripts/adapters.mjs generate [host|all] [--out DIRECTORY]\n       node scripts/adapters.mjs install <host> --scope project|user');
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

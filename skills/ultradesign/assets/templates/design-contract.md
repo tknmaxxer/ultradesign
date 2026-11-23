@@ -1,4 +1,7 @@
-# Design contract
+# Design contract (historical evaluation)
+
+This template belongs to the v0.1–v0.3 A/B runner. For new work, follow the
+[DESIGN.md system stage](../../prompts/04-system.md).
 
 ## Task and direction
 

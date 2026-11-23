@@ -1,0 +1,706 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["beautifulsoup4==4.13.4", "playwright==1.65.1"]
+# ///
+"""Build a private design-reference HTML board and JSON manifest."""
+
+import argparse
+from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import asdict, dataclass, field
+from html import escape
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import sys
+from urllib.parse import quote, quote_plus, unquote, urldefrag, urljoin, urlsplit
+import xml.etree.ElementTree as ET
+
+from bs4 import BeautifulSoup
+
+sys.dont_write_bytecode = True
+from reference_board_http import AccessError, PublicCache, digest, save
+from reference_board_cdp import PublicBrowser, curated_source, endpoint, owner_target, target_key
+
+
+HERE = Path(__file__).resolve().parent
+DEFAULT_OUT = Path.cwd() / ".reference-board"
+SOURCE_FILE = HERE / "reference-board-sources.json"
+STYLE_FILE = HERE / "reference-board.css"
+KINDS = ("screen", "mood", "component")
+
+# These associations aid discovery, not classification. Each card keeps its original source role.
+RELATED = (
+    ("subscription subscriptions billing pricing payment plan plans invoice upgrade", 3),
+    ("analytics analysis dashboard dashboards metrics statistics stat stats report reporting kpi data graph chart charts visualization visualizations", 4),
+    ("task tasks todo queue workflow job project kanban checklist step 작업 할일 할일목록", 4),
+    ("agent agents automation bot ai activity execution 에이전트", 4),
+    ("status state progress loading indicator badge presence completion timeline 상태 진행", 4),
+    ("list row table detail feed notification inbox item menu 목록 알림", 3),
+    ("calm quiet minimal minimalist clean simple restrained neutral", 3),
+    ("editorial magazine typography publication book serif article reading journal essay", 4),
+    ("research notes knowledge documentation docs reference library study archive", 4),
+)
+STOP = set("a an and for in on of or the to with ui web mobile app tool".split())
+
+
+@dataclass
+class Candidate:
+    source: str
+    source_id: str
+    title: str
+    url: str
+    kind: str
+    about: str = ""
+    tags: str = ""
+    image_url: str | None = None
+    image: str | None = None
+    image_error: str | None = None
+    provenance: dict = field(default_factory=dict)
+
+
+def soup(data):
+    return BeautifulSoup(data, "html.parser")
+
+
+def words(text):
+    return set(re.findall(r"[^\W_]+", text.casefold()))
+
+
+def score(query, item):
+    terms = words(query) - STOP
+    title = words(item.title)
+    details = words(item.about)
+    tags = words(item.tags)
+    weights = 8 * len(terms & title) + 3 * len(terms & ((details | tags) - title))
+    for group, weight in RELATED:
+        concept = set(group.split())
+        if terms & concept:
+            if title & concept:
+                weights += weight
+            elif tags & concept:
+                weights += min(3, weight)
+            elif details & concept:
+                weights += 1
+    return weights
+
+
+def title_for(url):
+    path = urlsplit(url).path.rstrip("/")
+    return re.sub(r"[-_]+", " ", unquote(path.rsplit("/", 1)[-1])).strip().capitalize()
+
+
+def candidate(source, title, url, about="", image=None, tags=""):
+    return Candidate(source["name"], source["id"], " ".join(title.split())[:160],
+                     urldefrag(url)[0], source["kind"], " ".join(about.split())[:400], tags, image,
+                     provenance={"route": "anonymous_public_adapter", "policy": source["policy"],
+                                 "catalog": source.get("entry"), "adapter": source["method"]})
+
+
+def curated_candidates(args, cache):
+    """Observe explicit targets before independent public adapters; never route around a denial."""
+    rows, results, denied_hosts = [], [], set()
+    mode = {"requested": bool(args.cdp), "state": "not_requested",
+            "detail": "CDP is opt-in and observes explicit --target-url and --candidate pages."}
+    browser = None
+    quota = False
+    if (args.targets or (args.cdp and args.candidate)) and not args.offline:
+        try:
+            browser = PublicBrowser(args.cdp, cache.images, args.platform)
+            browser.__enter__()
+            mode.update(state="connected" if args.cdp else "local_target",
+                        detail="New tabs in owner Chrome; existing tabs and credentials are not read."
+                        if args.cdp else "Isolated local Chromium for explicitly authorized target URLs.")
+        except Exception as error:
+            browser = None
+            mode.update(state="unavailable", detail=f"{'CDP' if args.cdp else 'Local Chromium'} unavailable: {error}")
+    elif args.cdp or args.targets:
+        mode.update(state="offline" if args.offline else "no_targets",
+                    detail="Offline mode prevents live browser observations." if args.offline else
+                    "No --target-url or --candidate pages supplied; public adapters remain anonymous.")
+    try:
+        owned_urls = {url for url, _, _ in args.targets}
+        for url, title, original in [*args.targets, *args.candidate]:
+            owned = original["kind"] == "target"
+            source = original | {
+                "id": ("target-" if owned else "curated-") + digest(url)[:12], "name": title.strip(),
+                "method": "target" if owned else "curated", "entry": url, "browse_url": url, "limit": 1,
+            }
+            rows.append(source)
+            status = {key: source[key] for key in ("id", "name", "kind", "quality", "method", "policy", "detail")}
+            status.update(link=url, matched=1, state="manual")
+            item = candidate(source, title, url)
+            item.provenance = {"route": "target_link" if owned else "curated_link", "policy": source["policy"],
+                               "authorization": "owner_target" if owned else "public_reference",
+                               "robots": "not_applicable_owner_target" if owned else "required",
+                               "observation": "not_observed"}
+            host = urlsplit(url).hostname
+            if host in denied_hosts or quota:
+                item.image_error = "Not visited: an earlier access denial or provider quota stopped this route."
+                status["state"] = "blocked"
+            elif browser is None or (not owned and not args.cdp):
+                item.image_error = mode["detail"] if args.cdp or owned else "No observation: supply --cdp to opt in to fresh-tab study."
+            else:
+                try:
+                    observation, image = browser.observe(url, source, cache,
+                                                         owned_targets=owned_urls if owned else frozenset())
+                    item.provenance.update(observation)
+                    item.provenance["observation"] = "observed"
+                    item.about = observation["heading"] or observation["page_title"]
+                    item.image = image.relative_to(cache.root.parent).as_posix()
+                    status["state"] = "ok"
+                except Exception as error:
+                    item.image_error = str(error)
+                    status.update(state="unavailable", errors=[str(error)])
+                    denied_hosts.add(host)
+                    quota = bool(re.search(r"HTTP 429|quota|rate limit|too many requests", str(error), re.I))
+                    if quota:
+                        mode.update(state="quota_stopped", detail="Provider quota encountered; no retries or fallback requests.")
+            results.append((status, [(1000, item)]))
+    finally:
+        if browser is not None:
+            browser.close()
+    return rows, results, mode, denied_hosts, quota
+
+
+def card_record(item, number=None):
+    return asdict(item) | {"id": "ref-" + digest(item.source_id + "\n" + item.url),
+                           "number": number, "selectable": number is not None}
+
+
+def sitemap(cache, source, entry):
+    root = ET.fromstring(cache.get(entry, source))
+    for row in root.findall("{*}url"):
+        url = row.findtext("{*}loc", "").strip()
+        if not url or not re.search(source["paths"], urlsplit(url).path):
+            continue
+        context = ""
+        if source.get("path_context"):
+            context = re.sub(r"[/_-]+", " ", urlsplit(url).path.rstrip("/").rsplit("/", 1)[0])
+        label = re.sub(source.get("slug_prefix", r"(?!)"), "", urlsplit(url).path.rstrip("/").rsplit("/", 1)[-1])
+        yield candidate(source, title_for(label), url, source.get("about", ""),
+                        row.findtext("{*}image/{*}loc"), tags=context)
+    if not root.findall("{*}url"):
+        raise AccessError(f"No URL entries (expected a leaf sitemap): {entry}")
+
+
+def links(cache, source, entry):
+    doc = soup(cache.get(entry, source))
+    for link in doc.select(source["selector"]):
+        target = link.get("href") or link.get("src")
+        if not target:
+            continue
+        url = urljoin(entry, target)
+        if not re.search(source["paths"], urlsplit(url).path):
+            continue
+        tile = link.find_parent(source["tile_parent"]) if source.get("tile_parent") else link
+        if source.get("tile_class"):
+            tile = link.find_parent(class_=source["tile_class"])
+        if tile is None:
+            continue
+        title = tile.select_one(source["title_selector"]) if source.get("title_selector") else link
+        image = tile.select_one(source["image_selector"]) if source.get("image_selector") else None
+        image_url = None
+        if image:
+            image_url = image.get("data-src") or image.get("poster") or image.get("src")
+            if (not image_url or image_url.startswith("data:")) and image.get("srcset"):
+                image_url = image["srcset"].split(",", 1)[0].strip().split()[0]
+        about = source.get("about", "")
+        if source.get("context_selector"):
+            parent = link.find_parent(class_=source["context_selector"])
+            if parent:
+                about += " " + parent.get_text(" ", strip=True)
+        label = title_for(url) if source.get("title_from_slug") else title.get_text(" ", strip=True) if title else ""
+        if not label:
+            label = link.get("title") or (image.get("alt") if image else None) or title_for(url)
+        yield candidate(source, label,
+                        url, about, urljoin(entry, image_url) if image_url else None,
+                        tags=title_for(entry) if source.get("entry_context") else "")
+
+
+def registry(cache, source, entry):
+    data = json.loads(cache.get(entry, source))
+    rows = data if isinstance(data, list) else data[source.get("json_items", "items")]
+    for row in rows:
+        slug = row["name"]
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", slug):
+            continue
+        title = row.get("title") or title_for(slug)
+        if source.get("types") and row.get("type") not in source["types"]:
+            continue
+        url = row.get(source["docs_field"]) if source.get("docs_field") else source["item_url"].format(slug=slug)
+        if not url:
+            continue
+        image = row.get(source["image_field"]) if source.get("image_field") else None
+        yield candidate(source, title, url, row.get("description") or "", image,
+                        tags=" ".join(row.get("categories", [])))
+
+
+def uiarc(cache, source, entry):
+    # llms-small links correctly distinguish blocks from components; the free registry
+    # is the authority on which entries we can use, not merely a visible Pro page.
+    published = {urlsplit(row.url).path.split("/")[-1] for row in registry(cache, source, source["free"])}
+    text = cache.get(entry, source).decode("utf-8")
+    for title, url, about in re.findall(r"^- \[([^\]]+)\]\((https://uiarc\.dev/components/[^)]+/markdown)\): (.*)",
+                                         text, re.MULTILINE):
+        page = url.removesuffix("/markdown")
+        if urlsplit(page).path.rsplit("/", 1)[-1] in published:
+            yield candidate(source, title, page, about)
+
+
+def fdroid(cache, source, entry):
+    data = json.loads(cache.get(entry, source))
+    for app in data["apps"]:
+        url = app["url"].rstrip("/") + "/"
+        if re.fullmatch(r"/en/packages/[A-Za-z0-9_.-]+/", urlsplit(url).path):
+            yield candidate(source, app["name"], url, app.get("summary") or "")
+
+
+def obsidian_themes(cache, source, entry):
+    for row in json.loads(cache.get(entry, source)):
+        repo = row.get("repo", "")
+        path = row.get("screenshot", "")
+        if row.get("legacy") or not re.fullmatch(r"[\w.-]+/[\w.-]+", repo):
+            continue
+        if not path or any(segment in {"", ".", ".."} for segment in path.split("/")) or ":" in path:
+            continue
+        yield candidate(source, row["name"], f"https://github.com/{repo}",
+                        about="Obsidian workspace with a publisher-submitted theme.",
+                        image=f"https://raw.githubusercontent.com/{repo}/HEAD/{quote(path, safe='/')}",
+                        tags="research notes")
+
+
+def markdown_index(cache, source, entry):
+    text = cache.get(entry, source).decode("utf-8")
+    groups = re.findall(r"^-\s+\[([^]\n]+)\]\(([^)\s]+)\)(?::\s*(.*))?$", text, re.MULTILINE)
+    groups.extend(re.findall(r"^-\s+([^:\n]+):\s+(https://\S+)(?:\s+-\s+(.*))?$", text, re.MULTILINE))
+    for title, target, about in groups:
+        url = urljoin(entry, target)
+        if source.get("trim_md"):
+            url = url.removesuffix(".md")
+        if re.search(source["paths"], urlsplit(url).path):
+            yield candidate(source, title, url, about)
+
+
+def markdown_cards(cache, source, entry):
+    text = cache.get(entry, source).decode("utf-8")
+    card = r"\[!\[([^]\n]+)\]\((https://[^)\n]+)\)\]\((https://[^)\n]+)\)"
+    for title, image, url in re.findall(card, text):
+        if re.search(source["paths"], urlsplit(url).path):
+            yield candidate(source, title, url, image=image, tags=title_for(entry.removesuffix(".md")))
+
+
+READERS = {"sitemap": sitemap, "links": links, "registry": registry,
+           "uiarc": uiarc, "fdroid": fdroid, "obsidian_themes": obsidian_themes,
+           "markdown": markdown_index, "markdown_cards": markdown_cards}
+
+
+def source_link(source, query, platform):
+    url = source.get("browse_url", source.get("entry"))
+    if isinstance(url, dict):
+        url = url[platform]
+    encode = quote_plus if "?" in url.partition("{query}")[0] else quote
+    if source.get("path_search"):
+        query = query.replace("/", " ")
+    return url.format(query=encode(query, safe=""), platform=platform)
+
+
+def related_candidates(cache, source, args):
+    status = {field: source[field] for field in ("id", "name", "kind", "quality", "method")}
+    status["link"] = source_link(source, args.query, args.platform)
+    status["policy"] = source["policy"]
+    status["detail"] = source["detail"]
+    if source.get("core"):
+        status["core"] = True
+        if source["id"] in args.core_note:
+            status["study_note"] = args.core_note[source["id"]]
+    if source["id"] in args.exclude_source:
+        status["detail"] = "Excluded from this board’s curation. " + status["detail"]
+        return status | {"state": "excluded", "matched": 0}, []
+    if source["method"] == "link":
+        return status | {"state": "manual", "matched": 0}, []
+    if args.platform not in source.get("platforms", ["web", "mobile"]) or (
+        source.get("only_for") and args.kind not in source["only_for"]
+    ):
+        return status | {"state": "not_applicable", "matched": 0}, []
+    if source.get("platform_paths"):
+        source = source | {"paths": source["platform_paths"][args.platform]}
+    entries = source["entry"]
+    if isinstance(entries, dict):
+        entries = entries[args.platform]
+    if isinstance(entries, str):
+        entries = [entries]
+    if source["method"] == "fdroid":
+        tokens = [token for token in re.findall(r"[^\W_]+", args.query.casefold()) if token not in STOP]
+        if words(args.query) & {"task", "tasks", "todo"}:
+            tokens = ["task", "todo", "kanban"]
+        entries = [entries[0].format(query=quote_plus(token)) for token in list(dict.fromkeys(tokens))[:3]]
+    if source.get("search_tokens"):
+        tokens = [token for token in re.findall(r"[^\W_]+", args.query.casefold()) if token not in STOP]
+        entries = [entries[0].format(query=quote_plus(token)) for token in list(dict.fromkeys(tokens))[:3]]
+    found, errors = {}, []
+    if source["method"] == "markdown_cards":
+        try:
+            index = list(markdown_index(cache, source | {"paths": source["section_paths"]}, entries[0]))
+            ranked = sorted(((score(args.query, row), row.url) for row in index), reverse=True)
+            entries = [url + ".md" for relevance, url in dict.fromkeys(ranked) if relevance >= 3][:3]
+        except (AccessError, OSError, ValueError) as error:
+            return status | {"state": "failed", "matched": 0, "errors": [str(error)]}, []
+        if not entries:
+            return status | {"state": "no_match", "matched": 0, "errors": []}, []
+    for entry in entries:
+        url = entry.format(query=quote_plus(args.query), platform=args.platform)
+        try:
+            for item in READERS[source["method"]](cache, source, url):
+                parts = urlsplit(item.url)
+                if item.title and parts.scheme == "https" and parts.netloc.lower() in source["hosts"]:
+                    found.setdefault(item.url, item)
+        except (AccessError, ValueError, TypeError, OSError, KeyError, ET.ParseError) as error:
+            errors.append(str(error))
+            if isinstance(error, AccessError) and ("HTTP 429" in str(error) or "24h hold" in str(error)):
+                break
+    picks = []
+    for item in found.values():
+        relevance = score(args.query, item)
+        if relevance >= 3 or source.get("query_search"):
+            picks.append((relevance, item))
+    if not picks and source.get("system_baseline"):
+        picks = [(0, found[url]) for url in source["system_baseline"] if url in found]
+    picks = [(rating, item) for rating, item in picks if item.url not in args.exclude_url]
+    picks.sort(key=lambda row: -row[0])
+    state = "partial" if errors and found else "failed" if errors else "ok" if picks else "no_match"
+    if not found and not errors:
+        state = "failed"
+        errors = ["No entries matched this adapter's catalog format."]
+    return status | {"state": state, "matched": len(picks), "errors": errors}, picks
+
+
+def preview_url(cache, source, item):
+    if not source.get("preview"):
+        return None
+    if item.image_url:
+        return urljoin(item.url, item.image_url)
+    if source["preview"] in {"og", "page_image"}:
+        doc = soup(cache.get(item.url, source))
+    if source["preview"] == "og":
+        meta = doc.select_one('meta[property="og:image"][content]')
+        if meta:
+            return urljoin(item.url, meta["content"])
+    if source["preview"] == "page_image":
+        selectors = source["preview_selector"]
+        for selector in [selectors] if isinstance(selectors, str) else selectors:
+            img = doc.select_one(selector)
+            if img:
+                url = img.get("data-src") or img.get("poster") or img.get("src")
+                if url and not url.startswith("data:"):
+                    return urljoin(item.url, url)
+    return None
+
+
+def cache_previews(cache, source, cards):
+    for item in cards:
+        try:
+            item.image_url = preview_url(cache, source, item)
+            if item.image_url:
+                item.image = cache.image(item.image_url, source).relative_to(cache.root.parent).as_posix()
+            elif source.get("preview"):
+                item.image_error = "No supported public preview was supplied by the source."
+        except (AccessError, OSError, ValueError) as error:
+            item.image_error = str(error)
+
+
+def choose(statuses, found, sources, args):
+    groups = defaultdict(list)
+    states = {status["id"]: status for status in statuses}
+    for source, picks in zip(sources, found):
+        if source["kind"] == "target":
+            groups["targets"].extend(item for _, item in picks)
+            continue
+        if source["kind"] == "system":
+            # Keep system decisions visible and separate from the 1–3 board picks.
+            groups["system"].extend(item for _, item in picks[:4])
+            continue
+        primary = source["kind"] == args.kind or args.kind in source.get("serves", [])
+        group = "primary" if primary else "related"
+        quota = min(source.get("limit", 12), args.limit)
+        for index, (rating, item) in enumerate(picks[:quota]):
+            # Discount repeated results from one source before adding more cards from it.
+            groups[group].append((rating - 2 * index, item))
+
+    def take(group, limit):
+        pool = sorted(groups[group], key=lambda row: -row[0])
+        result, seen = [], set()
+        for _, item in pool:
+            if item.url in seen:
+                continue
+            seen.add(item.url)
+            result.append(item)
+            if len(result) == limit:
+                break
+        return result if limit > 0 else []
+
+    primary = take("primary", args.limit)
+    adjacent = take("related", args.limit - len(primary))
+    selected = primary + adjacent + groups["system"] + groups["targets"]
+    counts = Counter(item.source_id for item in selected)
+    for key, status in states.items():
+        status["shown"] = counts[key]
+    return primary, adjacent, groups["system"], groups["targets"]
+
+
+def h(text):
+    return escape(str(text), quote=True)
+
+
+def write_board(path, slug, payload):
+    css = STYLE_FILE.read_text(encoding="utf-8")
+    core_sources = [source for source in payload["sources"]
+                    if source.get("core") and source["state"] != "excluded"]
+    core_sources.sort(key=lambda source: not source.get("study_note"))
+    core_links = []
+    for source in core_sources:
+        note = f'<p>{h(source["study_note"])}</p>' if source.get("study_note") else ""
+        core_links.append(f'<li><a href="{h(source["link"])}">{h(source["name"])} ↗</a>'
+                          f'<span>{h(source["kind"])}</span>{note}</li>')
+    core = (
+        '<section aria-labelledby="core-sources-title"><header class="section-heading">'
+        '<h2 id="core-sources-title">Core sources</h2>'
+        '<p>Browse these first. Links may require an account and are not collected candidates.</p></header>'
+        f'<ul class="core-sources">{"".join(core_links)}</ul></section>'
+    ) if core_links else ""
+    sections = [
+        ("targets", "Current screen", "Owner-authorized target evidence; these screens are not reference picks."),
+        ("primary", "In kind", "Candidates from sources for this reference type."),
+        ("related", "Related patterns", "Adjacent components or expression, not substitutes for the requested reference type."),
+        ("systems", "Design systems", "For the system step. These do not count as board candidates."),
+    ]
+    cards = []
+    for key, label, hint in sections:
+        if not payload[key] and key != "primary":
+            continue
+        cards.append(f'<section aria-labelledby="{key}"><header class="section-heading">'
+                     f'<h2 id="{key}">{label}</h2><p>{hint}</p></header>')
+        if not payload[key]:
+            cards.append('<p class="empty">No in-kind candidates from eligible sources. '
+                         'See the source ledger for the reason and manual routes.</p>')
+        cards.append('<ol class="grid">')
+        for item in payload[key]:
+            if item["image"]:
+                alt = f'Source preview: {item["title"]}'
+                media = (f'<div class="media"><img src="{h(item["image"])}" alt="{h(alt)}" '
+                         f'width="640" height="400"></div>')
+            else:
+                label = "Preview unavailable" if item["image_error"] else "Link only"
+                media = f'<div class="link-only">{label}</div>'
+            error = f'<p class="image-error">{h(item["image_error"])}</p>' if item["image_error"] else ""
+            pick = "pickable" if item["selectable"] else "target only" if key == "targets" else "system only"
+            number = f'{item["number"]:02}' if item["selectable"] else "Current" if key == "targets" else "System"
+            cards.append(
+                f'<li id="{h(item["id"])}" data-reference-id="{h(item["id"])}" '
+                f'data-selectable="{str(item["selectable"]).lower()}"><article>'
+                f'<a class="card" href="{h(item["url"])}">{media}'
+                f'<div class="card-body"><div class="meta"><span class="num">{h(number)}</span>'
+                f'<span class="badge">{h(item["source"])}</span><span>{h(item["kind"])}</span></div>'
+                f'<h3>{h(item["title"])} <span aria-hidden="true">↗</span></h3>'
+                f'<small class="reference-id">{h(item["id"])} · {pick}</small></div></a>{error}</article></li>'
+            )
+        cards.append("</ol></section>")
+    report = []
+    for source in payload["sources"]:
+        notes = h(source["detail"])
+        if source.get("errors"):
+            notes += " " + " · ".join(h(error) for error in source["errors"])
+        quality_label = {"strong": "strong for its role", "variable": "variable",
+                         "basic": "baseline"}.get(source["quality"], source["quality"])
+        policy = "" if source["kind"] == "target" else f' <a href="{h(source["policy"])}">Access policy ↗</a>'
+        report.append(
+            f'<li><div><a class="source-name" href="{h(source["link"])}">{h(source["name"])} ↗</a>'
+            f'<small class="quality">{h(quality_label)}</small></div>'
+            f'<span class="state {h(source["state"])}">{h(source["state"].replace("_", " "))}</span>'
+            f'<span class="count">{source["shown"]} shown / {source["matched"]} eligible</span>'
+            f'<p>{notes}{policy}</p></li>'
+        )
+    stats = payload["counts"]
+    notice = ""
+    if stats["with_images"] < stats["primary"] + stats["related"]:
+        notice = ('<p class="notice">Some candidates have links only. '
+                  'See the card and source ledger for access details.</p>')
+    document = f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src file: 'self'; style-src 'unsafe-inline'">
+<title>{h(payload['query'])} — Reference Board</title><style>{css}</style></head>
+<body data-platform="{h(payload['platform'])}"><main><div class="masthead"><p>ULTRADESIGN <span>/</span> REFERENCE DESK</p>
+<a href="#sources">Source ledger ↓</a></div><header class="intro">
+<p class="kicker">{h(payload['kind'])} · {h(payload['platform'])} / PRIVATE STUDY</p>
+<h1>{h(payload['query'])}</h1><p class="instruction">Open promising references and choose 1–3 to study.</p>
+<p class="totals"><span><strong>{stats['primary']}</strong> in kind</span>
+<span><strong>{stats['related']}</strong> related</span>
+<span><strong>{stats['with_images']}</strong> with images</span>
+<a href="{h(slug)}.json">JSON manifest ↓</a></p>{notice}</header>
+{core}
+{''.join(cards)}
+<section id="sources" aria-labelledby="sources-title"><header class="section-heading">
+<h2 id="sources-title">Source ledger</h2><p>Anonymous adapters or opt-in fresh-tab public study. Manual links are not observations.</p>
+</header><ul class="sources">{''.join(report)}</ul></section></main></body></html>
+"""
+    save(path, document.encode())
+
+
+def screenshot(path):
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(
+            executable_path=(os.environ.get("UD_CHROMIUM_PATH") or shutil.which("google-chrome")
+                             or shutil.which("chromium"))
+        )
+        context = browser.new_context(viewport={"width": 1440, "height": 900},
+                                      device_scale_factor=1, service_workers="block",
+                                      reduced_motion="reduce", accept_downloads=False)
+        context.route("http://**/*", lambda route: route.abort())
+        context.route("https://**/*", lambda route: route.abort())
+        page = context.new_page()
+        page.goto(path.as_uri(), wait_until="load")
+        broken = page.locator("img").evaluate_all(
+            "(images) => images.filter(img => !img.complete || !img.naturalWidth).map(img => img.alt)"
+        )
+        if broken:
+            raise ValueError(f"Board contains unreadable local previews: {', '.join(broken)}")
+        page.screenshot(path=path.with_suffix(".png"), full_page=True,
+                        animations="disabled", timeout=12000)
+        context.close()
+        browser.close()
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, epilog=(
+        'Example: uv run --script skills/ultradesign/scripts/reference-board "landing hero" --kind screen --platform web '
+        "--out /path/to/private/refs --screenshot"
+    ))
+    parser.add_argument("query")
+    parser.add_argument("--kind", required=True, choices=KINDS)
+    parser.add_argument("--platform", required=True, choices=("web", "mobile"))
+    parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    parser.add_argument("--name", help="Output stem (default: query and platform)")
+    parser.add_argument("--limit", type=int, default=48, choices=range(1, 61), metavar="1–60")
+    parser.add_argument("--exclude-source", action="append", default=[], metavar="ID",
+                        help="Exclude a source from this board; may be repeated")
+    parser.add_argument("--exclude-url", action="append", default=[], metavar="URL",
+                        help="Exclude an exact candidate URL from this board; may be repeated")
+    parser.add_argument("--core-note", action="append", nargs=2, default=[], metavar=("ID", "NOTE"),
+                        help="Add an original study note to a core browse link; may be repeated")
+    parser.add_argument("--offline", action="store_true", help="Read cached responses without any network requests")
+    parser.add_argument("--cdp", metavar="LOOPBACK_HTTP",
+                        help="Owner opt-in, e.g. http://127.0.0.1:9222; new tabs in the owner profile")
+    parser.add_argument("--target-url", action="append", default=[], metavar="URL",
+                        help="Repeatable exact URL of an explicitly authorized owner product; capture separately from references")
+    parser.add_argument("--candidate", action="append", nargs=2, default=[], metavar=("URL", "TITLE"),
+                        help="Repeatable authorized public first-party target; asserts observation permission. "
+                             "Restricted galleries remain manual; captures initial viewport only")
+    parser.add_argument("--screenshot", action="store_true", help="Capture the rendered board at 1440px in local Chrome")
+    args = parser.parse_args()
+    args.query = args.query.strip()
+    if not args.query or len(args.query) > 160:
+        parser.error("query must contain 1–160 characters")
+    stem = re.sub(r"[^\w]+", "-", args.query.casefold()).strip("-")[:64] or "board"
+    name = args.name or f"{stem}-{args.platform}"
+    if not re.fullmatch(r"[\w-]{1,90}", name):
+        parser.error("name must be letters, digits, underscores or hyphens (1–90 characters)")
+    sources = json.loads(SOURCE_FILE.read_text(encoding="utf-8"))
+    try:
+        if args.cdp:
+            args.cdp = endpoint(args.cdp)
+        targets = {}
+        for url in args.target_url:
+            row = owner_target(url, sources)
+            targets.setdefault(row[0], row)
+        args.targets = list(targets.values())
+        if len(args.candidate) > args.limit:
+            raise ValueError("candidate count must not exceed --limit")
+        curated = {}
+        for url, title in args.candidate:
+            url, source = curated_source(url, title, sources, args.kind)
+            if target_key(url) not in targets:
+                curated.setdefault(url, (url, title, source))
+        args.candidate = list(curated.values())
+    except ValueError as error:
+        parser.error(str(error))
+    unknown = set(args.exclude_source) - {source["id"] for source in sources}
+    if unknown:
+        parser.error(f"unknown source IDs: {', '.join(sorted(unknown))}")
+    args.core_note = dict(args.core_note)
+    not_core = args.core_note.keys() - {source["id"] for source in sources if source.get("core")}
+    if not_core:
+        parser.error(f"study notes require core source IDs: {', '.join(sorted(not_core))}")
+    args.exclude_source = set(args.exclude_source)
+    args.exclude_url = {urldefrag(url)[0] for url in args.exclude_url}
+    args.candidate = [row for row in args.candidate
+                      if row[0] not in args.exclude_url and row[2]["id"] not in args.exclude_source]
+    os.umask(0o077)
+    out = args.out.resolve()
+    out.mkdir(parents=True, exist_ok=True, mode=0o700)
+    cache = PublicCache(out / ".reference-board-cache", args.offline, DEFAULT_OUT / "rate-limits")
+    curated_rows, curated_results, cdp, denied_hosts, quota = curated_candidates(args, cache)
+
+    def collect(source):
+        hosts = source.get("hosts", [])
+        blocked = quota or any(host.split(":")[0] in denied_hosts for host in hosts)
+        if blocked and source["method"] != "link":
+            return ({
+                **{key: source[key] for key in ("id", "name", "kind", "quality", "method", "policy")},
+                "link": source_link(source, args.query, args.platform), "state": "blocked", "matched": 0,
+                "detail": "Stopped after provider quota or same-origin CDP denial; no alternate route attempted.",
+            }, [])
+        return related_candidates(cache, source, args)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(collect, sources)) + curated_results
+        public_sources = sources
+        sources = sources + curated_rows
+        statuses, found = zip(*results)
+        primary, related, systems, targets = choose(statuses, found, sources, args)
+        selected = primary + related
+        buckets = defaultdict(list)
+        for item in selected + targets:
+            buckets[item.source_id].append(item)
+        list(pool.map(lambda source: cache_previews(cache, source, buckets[source["id"]]), public_sources))
+    for group in (primary, related):
+        seen_images = set()
+        for item in group:
+            if not item.image:
+                continue
+            if item.image in seen_images:
+                item.image = None
+                item.image_error = "Same preview as another candidate in this section."
+            else:
+                seen_images.add(item.image)
+        group.sort(key=lambda item: item.image is None)
+    for status in statuses:
+        status["with_images"] = sum(bool(item.image) for item in buckets[status["id"]])
+        status["preview_failures"] = sum(bool(item.image_error) for item in buckets[status["id"]])
+    payload = {
+        "query": args.query, "kind": args.kind, "platform": args.platform,
+        "counts": {"primary": len(primary), "related": len(related),
+                   "with_images": sum(bool(item.image) for item in selected)},
+        "schema_version": 1, "cdp": cdp,
+        "targets": [card_record(item) for item in targets],
+        "primary": [card_record(item, number) for number, item in enumerate(primary, 1)],
+        "related": [card_record(item, number) for number, item in enumerate(related, len(primary) + 1)],
+        "systems": [card_record(item) for item in systems], "sources": list(statuses),
+    }
+    path = out / f"{name}.html"
+    save(out / f"{name}.json", (json.dumps(payload, ensure_ascii=False, indent=2) + "\n").encode())
+    write_board(path, name, payload)
+    if args.screenshot:
+        screenshot(path)
+    print(f"{path}: {payload['counts']}")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, ValueError) as error:
+        sys.exit(str(error))

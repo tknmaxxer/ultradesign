@@ -1,27 +1,41 @@
-# Reference catalog by design need
+# Reference catalog
 
-Build a living collection organized by questions such as “How does the user recover from an empty queue?” Save distinct examples from everyday use; for a new task, retrieve by decision rather than by visual similarity. Capture the specific screen, behavior, and source URL in a [pattern note](pattern-note.md).
+## Screens
 
-| Need | Starting points | Capture |
-| --- | --- | --- |
-| Task flows, onboarding, navigation, recovery | [Mobbin](https://mobbin.com/), [UIBowl](https://uibowl.io/landing) | Screen sequence, decisions, content density, state changes, continuity across sizes |
-| Analytics reading order, reporting density | [Our World in Data · direct chart](https://ourworldindata.org/grapher/world-gdp-over-the-last-two-millennia?embed=true), [shadcn · direct dashboard](https://ui.shadcn.com/view/new-york-v4/dashboard-01), [Cloudflare Status](https://www.cloudflarestatus.com/) | Dominant trend and controls, record anatomy, and secondary status treatment; select the reference for the relationship the task needs |
-| Form or component anatomy, behavior, variants | [shadcn-admin · profile settings](https://shadcn-admin.netlify.app/settings), [Figma Community](https://www.figma.com/community), [UIArc](https://uiarc.dev/) | Label/input/helper text alignment, section navigation, and state patterns; inspect a live example for interaction |
-| Chronological mobile lists and day strips | [daisyUI · timeline examples](https://daisyui.com/components/timeline/) | Look at both axes and which renders a whole sequence at the narrow width. Adapt time labels and the completion mark to actual items. |
-| Composition, typography, palette, imagery | [Dribbble](https://dribbble.com/), [Behance](https://www.behance.net/), [Pinterest](https://www.pinterest.com/) | Visual order, type roles, crops, and how whitespace supports the content |
-| Landing sections, product demos, responsive transitions | [Ghost](https://ghost.org/), [21st.dev](https://21st.dev/), [UIArc](https://uiarc.dev/) | User question each section answers, place of the primary action, demo fallback, stacking and reflow |
-| Tokens, documentation, and sharing a system | [Seed Design](https://seed-design.io/), [Horon Design](https://design.horon.ai/), [Horon source](https://github.com/horon-ai/design) | Semantic naming, component usage and states, separation of site and consumable package |
+Start with core browse links, then add galleries relevant to the decision. The
+[source registry](../scripts/reference-board-sources.json) defines the approved
+public adapters and their current policies. Compare the actual examples and
+record each exact URL, visible state, and decision it helps with.
 
-## From study to build
+| Source | What to look for |
+| --- | --- |
+| [Mobbin](https://mobbin.com/) | Real product screens and flows. Check the public preview; record any login or payment gap. |
+| [UIBowl](https://uibowl.io/) | Screens and landing sections searchable by type. |
+| [Figma Community](https://www.figma.com/community) | Public interface files and previews showing layout, structure or states. |
+| [Dribbble](https://dribbble.com/) | Task-matched compositions and individual screen examples. Distinguish a still from a working flow. |
+| [Behance](https://www.behance.net/) | Project presentations with several views or an explanation of the design problem. |
+| [Pinterest](https://www.pinterest.com/) | Visual collections and public references for a specific composition question. Record where the work can actually be seen. |
+| [21st.dev](https://21st.dev/community/components) | Landing and component compositions; use these for anatomy and interaction rather than full product flows. |
 
-- For the direct chart, `figure.chart` frames the real plot and controls; `figure.chart svg` is a readiness cue. For the direct dashboard, use `main` for shell geometry and `table` for record rhythm. For the settings example, wait for `form` instead of capturing the initially blank shell. These are starting points, not fixed references to reuse for every task.
-- Inspect existing product variants first. [Storybook](https://storybook.js.org/) or a project preview route can make the shared states visible in isolation. For React components requiring custom styling, [Base UI](https://base-ui.com/) is an example of a headless behavior layer.
-- Compare alternatives in the app, or sketch in [Figma](https://www.figma.com/) or [Paper](https://paper.design/) when the layout uncertainty warrants it. Check spacing, wraps, and state transitions again in rendered code.
-- Study a whole-page reference as a set of slices to understand composition and setup. For screens behind login, look for a public demo, official documentation with real states, or a user-supplied capture. Rebuild the useful relationships with project code, data and assets. Keep source screenshots in the private evidence folder.
-- For imagery, prefer real product evidence or project-owned art. Where suitable, generate imagery against an explicit subject, crop, intended role, and license/usage requirement. Verify target-width crops in context.
+Keep these core browse links manual when automated access is restricted or
+unverified. Use authorized first-party pages in fresh tabs for CDP observations.
+A blank, blocked, or consent-only screenshot records access, not a screen.
 
-## Example adaptations
+Examples of specific screen links: [Mobbin Midday dashboard](https://mobbin.com/explore/screens/fa47d11e-0857-4ddc-a515-c837358b7c68) and [Mobbin Lightdash hero](https://mobbin.com/explore/sections/29e133de-34ee-4255-a796-b185d60e359d). Public stills can establish layout, not responsive reflow or working interactions.
 
-**Setup dashboard:** Study a multi-step onboarding flow to learn how people keep their place. Retain the progress signal and the primary next action. Replace nested containers with aligned inline sections, reuse the product's status and table variants, and put the action within reach when navigation compresses.
+For public alternatives, use first-party product docs such as [Metabase](https://www.metabase.com/docs/latest/dashboards/introduction) for dashboards, [F-Droid](https://f-droid.org/) publisher screenshots for mobile apps, or [Lapa Ninja](https://www.lapa.ninja/) and [Landingfolio](https://www.landingfolio.com/) gallery previews for landings. Keep shortcomings like broken previews and link-only results in the board ledger.
 
-**Developer-tool landing:** Study a reference that proves its value with a before/after example. Retain the location of the evidence near the main action. Substitute an actual input and output from the product. On narrow screens, queue the copy, action and readable demo in task order.
+## Design systems
+
+- [SEED Design](https://seed-design.io/): foundations, tokens, and component documentation as a model for organizing the system.
+- [Horon Design](https://design.horon.ai/) and [Horon source](https://github.com/horon-ai/design): compare the documentation and component structure, then adapt it to the project.
+- [Storybook](https://storybook.js.org/): inspect the project's actual variants side by side.
+
+## Component showcases
+
+- [UIArc](https://uiarc.dev/): give the agent a link to the specific component or demonstration to recreate.
+- [21st.dev](https://21st.dev/): select concrete components for landing and intro pages.
+- [daisyUI](https://daisyui.com/components/): inspect component anatomy and variants as a catalog.
+- [Base UI](https://base-ui.com/): unstyled behavior primitives for React, not a screen reference or styled template.
+
+Examples of direct showcase links: [UIArc dashboard controls](https://uiarc.dev/guides/saas-dashboard-react), [21st.dev waitlist hero](https://21st.dev/@minhxthanh/components/waitlist-hero) ([public preview](https://cdn.21st.dev/minhxthanh/waitlist-hero/default/bundle.1764083294693.html)), and [daisyUI metric variations](https://daisyui.com/components/stat/). Select links for the current component, not a fixed template for the whole page.

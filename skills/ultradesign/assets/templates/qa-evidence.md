@@ -1,19 +1,10 @@
-# QA evidence
+# UX QA round index
 
-- Contract or brief:
-- Revision / route / run command:
-- Build, fixture and browser/device:
-- Representative widths and breakpoint edges:
-- Evidence location:
+- Scope, decision evidence (`brief.md`, `DESIGN.md`, `/system` render):
+- Route, fixture and scenario IDs:
+- Remorsearch version/path, or fallback reason and coverage:
 
-| Route, width or device | State and action / input | Expected | Observed | Status | Evidence |
-| --- | --- | --- | --- | --- | --- |
-
-Record results as **pass**, **fail**, **not run**, or **not applicable**. Identify screenshot, automated signal, interaction observation, or device evidence. Include default and reduced-motion checks for implemented transitions.
-
-| Severity / impact on task | Failure and condition | Owning component or decision | Correction | Same-condition rerun and evidence |
+| Round (0 = baseline; 1–3 = fix/replay) | Build, report, run and bundle paths | Resolved | Still open | New or regression |
 | --- | --- | --- | --- | --- |
 
-## Unverified
-
-List checks the environment could not cover, the specific constraint, and the condition needed to verify each.
+Use the installed Remorsearch persona QA report template for observation, severity and coverage. For fallback, record the expected and observed result per task × viewport × input with capture or interaction evidence. Name checks not run and why. Tie the final handoff to the latest observed build rather than the baseline.

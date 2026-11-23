@@ -271,7 +271,7 @@ test("failed builder records its phase without stderr/secrets, publishes no repo
   } finally { await rm(data.root, { recursive: true, force: true }); }
 });
 
-test("HTML delivery uses tool-free builders and provides the canonical prompts only to /ud", async () => {
+test("historical HTML delivery provides the complete frozen workflow only to /ud", async () => {
   const data = await fixture();
   try {
     await run({ ...data.options, "builder-output": "html" });
@@ -283,8 +283,11 @@ test("HTML delivery uses tool-free builders and provides the canonical prompts o
     assert.match(baseline.prompt, /exactly one complete, self-contained HTML/);
     assert.ok(!baseline.args.includes("--append-system-prompt"));
     const guidance = treatment.args[treatment.args.indexOf("--append-system-prompt") + 1];
+    const frozen = await readFile(new URL("../evals/workflow-v03.txt", import.meta.url), "utf8");
+    assert.ok(guidance.endsWith(frozen));
     assert.match(guidance, /# 1 · Collect, reconstruct, adapt/);
     assert.match(guidance, /# 5 · Verify the real design/);
+    assert.doesNotMatch(guidance, /Open owner gate|one-question design interview/);
     const manifest = JSON.parse(await readFile(join(data.options.out, "private", "manifest.json")));
     assert.equal(manifest.builderOutput, "html");
     assert.equal(manifest.status, "completed");

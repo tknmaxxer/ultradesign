@@ -1,0 +1,310 @@
+[
+  {
+    "id": "mobbin", "name": "Mobbin", "kind": "screen", "method": "link", "quality": "strong", "core": true,
+    "browse_url": {"web": "https://mobbin.com/browse/web/apps", "mobile": "https://mobbin.com/browse/ios/apps"},
+    "policy": "https://mobbin.com/terms",
+    "detail": "Public sample browsing only. Automated collection/cache is restricted; official search MCP requires OAuth and an eligible paid plan."
+  },
+  {
+    "id": "uibowl", "name": "UIBowl", "kind": "screen", "method": "link", "quality": "strong", "core": true,
+    "browse_url": "https://uibowl.io/landing",
+    "policy": "https://blossom-browser-536.notion.site/187bc17e4311802dae6ed853b5787f5f",
+    "detail": "Public landing; full pattern library and automation are not an anonymous grant. Use the site's Google login/MCP only if authorized."
+  },
+  {
+    "id": "figma", "name": "Figma Community", "kind": "screen", "method": "link", "quality": "variable", "core": true,
+    "browse_url": "https://www.figma.com/community/search?query={query}",
+    "policy": "https://www.figma.com/legal/aup/",
+    "detail": "Manual Community search. robots.txt disallows the search route; documented REST/MCP access for authorized files is not Community discovery."
+  },
+  {
+    "id": "dribbble", "name": "Dribbble", "kind": "mood", "method": "link", "quality": "variable", "core": true,
+    "browse_url": "https://dribbble.com/search/{query}", "path_search": true,
+    "policy": "https://dribbble.com/terms",
+    "detail": "Manual public shots. Terms restrict scraping; the official authenticated API does not provide an anonymous design-discovery feed."
+  },
+  {
+    "id": "behance", "name": "Behance", "kind": "mood", "method": "link", "quality": "strong", "core": true,
+    "browse_url": "https://www.behance.net/search/projects?search={query}",
+    "policy": "https://wwwimages2.adobe.com/content/dam/cc/en/legal/servicetou/Behance-Product-Specific-Terms-en_US-20240618.pdf",
+    "detail": "Manual projects. Anonymous robots request returned HTTP 400; no public design-search API verified. HTTP 400 does not identify the cause."
+  },
+  {
+    "id": "pinterest", "name": "Pinterest", "kind": "mood", "method": "link", "quality": "variable", "core": true,
+    "browse_url": "https://www.pinterest.com/search/pins/?q={query}",
+    "policy": "https://policy.pinterest.com/en/terms-of-service",
+    "detail": "Manual search can show an account wall. No automated collection without explicit permission; the official API has approval and OAuth requirements."
+  },
+  {
+    "id": "uiarc", "name": "UIArc", "kind": "component", "method": "uiarc", "quality": "strong",
+    "browse_url": "https://uiarc.dev/components",
+    "entry": "https://uiarc.dev/llms-small.txt",
+    "free": "https://uiarc.dev/r/registry.json",
+    "item_url": "https://uiarc.dev/components/{slug}",
+    "hosts": ["uiarc.dev"],
+    "types": ["registry:component", "registry:block"],
+    "policy": "https://uiarc.dev/terms",
+    "detail": "Official machine-readable index, filtered to free registry entries. Preview frames and Pro content are not collected."
+  },
+  {
+    "id": "21st", "name": "21st.dev", "kind": "component", "method": "link", "quality": "variable", "core": true,
+    "browse_url": "https://21st.dev/community/components?q={query}",
+    "policy": "https://21st.dev/terms",
+    "detail": "Public community browse; marketplace collection/media reuse require written consent. Official MCP is a separate API-key route."
+  },
+  {
+    "id": "daisyui", "name": "daisyUI", "kind": "component", "method": "sitemap", "quality": "basic", "browser_public": true,
+    "browse_url": "https://daisyui.com/components/",
+    "entry": "https://daisyui.com/sitemap.xml",
+    "hosts": ["daisyui.com", "img.daisyui.com"],
+    "paths": "^/components/[^/]+/$",
+    "preview": "og",
+    "limit": 12,
+    "policy": "https://daisyui.com/docs/intro/",
+    "detail": "Official OSS component sitemap and public component preview artwork. Blueprint and separate paid products are not accessed."
+  },
+  {
+    "id": "seed", "name": "SEED Design", "kind": "system", "method": "sitemap", "quality": "strong", "browser_public": true,
+    "browse_url": "https://seed-design.io/components",
+    "entry": "https://seed-design.io/sitemap.xml",
+    "hosts": ["seed-design.io"],
+    "paths": "^/(foundations|components)/[^/]+$",
+    "system_baseline": ["https://seed-design.io/foundations/design-token", "https://seed-design.io/foundations/spacing"],
+    "policy": "https://github.com/daangn/seed-design",
+    "detail": "Official sitemap and public foundation/component docs; links for the system step, not an app-screen library."
+  },
+  {
+    "id": "horon", "name": "Horon", "kind": "system", "method": "links", "quality": "strong",
+    "browse_url": "https://design.horon.ai/components/",
+    "entry": ["https://design.horon.ai/components/", "https://design.horon.ai/foundations/"],
+    "hosts": ["design.horon.ai"],
+    "paths": "^/(components|foundations)/[^/]+/$",
+    "selector": "main a[href]",
+    "system_baseline": ["https://design.horon.ai/foundations/tokens/", "https://design.horon.ai/foundations/typography/"],
+    "policy": "https://github.com/horon-ai/design/blob/main/LICENSE",
+    "detail": "Public Astro catalogs; documentation links only. PolyForm Strict is not a commercial reuse license."
+  },
+  {
+    "id": "fdroid", "name": "F-Droid", "kind": "screen", "method": "fdroid", "quality": "variable",
+    "browse_url": "https://search.f-droid.org/?q={query}",
+    "entry": "https://search.f-droid.org/api/search_apps?q={query}",
+    "hosts": ["search.f-droid.org", "f-droid.org"],
+    "platforms": ["mobile"], "only_for": ["screen"], "limit": 14,
+    "preview": "page_image", "preview_selector": ".screenshot img[src*='/phoneScreenshots/']",
+    "policy": "https://f-droid.org/en/docs/All_our_APIs/",
+    "detail": "Documented anonymous package search and published Android phone screenshots. Real apps, not all polished or agent-specific."
+  },
+  {
+    "id": "metabase", "name": "Metabase Docs", "kind": "screen", "method": "sitemap", "quality": "strong", "browser_public": true,
+    "browse_url": "https://www.metabase.com/docs/latest/dashboards/introduction",
+    "entry": "https://www.metabase.com/docs/sitemap.xml",
+    "hosts": ["www.metabase.com"], "platforms": ["web"], "only_for": ["screen"],
+    "paths": "^/docs/latest/(dashboards|questions/visualizations)/[^/]+$",
+    "path_context": true, "preview": "page_image", "limit": 12,
+    "preview_selector": ["img[src*='/dashboards/images/email-options.']", "img[src*='/dashboards/images/']", "img[src*='/questions/images/']"],
+    "policy": "https://www.metabase.com/robots.txt",
+    "detail": "Official product docs and published UI illustrations. Dashboard subscriptions here means report delivery, not SaaS subscription revenue."
+  },
+  {
+    "id": "superset", "name": "Apache Superset", "kind": "screen", "method": "sitemap", "quality": "strong", "browser_public": true,
+    "browse_url": "https://superset.apache.org/user-docs/using-superset/creating-your-first-dashboard/",
+    "entry": "https://superset.apache.org/sitemap.xml",
+    "hosts": ["superset.apache.org"], "platforms": ["web"], "only_for": ["screen"],
+    "paths": "^/user-docs/using-superset/[^/]+/?$",
+    "preview": "page_image", "limit": 4,
+    "preview_selector": ["img[src*='tutorial_first_dashboard']", "article img[src*='/img/']:not([src$='.svg'])"],
+    "policy": "https://superset.apache.org/robots.txt",
+    "detail": "Apache project documentation, not an authenticated Superset instance or API. Product screenshots show dashboard and chart-building layout."
+  },
+  {
+    "id": "hugo-themes", "name": "Hugo Themes", "kind": "mood", "method": "links", "quality": "variable",
+    "browse_url": "https://themes.gohugo.io/tags/minimal/",
+    "entry": ["https://themes.gohugo.io/tags/minimal/", "https://themes.gohugo.io/tags/docs/"],
+    "hosts": ["themes.gohugo.io"], "platforms": ["web"], "only_for": ["mood"], "limit": 16,
+    "paths": "^/themes/[^/]+/$",
+    "selector": "main li a[href^='/themes/']", "tile_parent": "li",
+    "title_selector": ":scope > p", "image_selector": "picture source[type='image/webp']",
+    "entry_context": true, "preview": "embedded",
+    "policy": "https://github.com/gohugoio/hugoThemesSiteBuilder",
+    "detail": "Anonymous theme-tag catalogs with published gallery thumbnails. Layout and type references, not screenshots of operating research tools."
+  },
+  {
+    "id": "obsidian-themes", "name": "Obsidian Community Themes", "kind": "mood", "method": "obsidian_themes", "quality": "strong",
+    "browse_url": "https://obsidian.md/themes",
+    "entry": "https://raw.githubusercontent.com/obsidianmd/obsidian-releases/master/community-css-themes.json",
+    "hosts": ["github.com", "raw.githubusercontent.com"],
+    "platforms": ["web"], "only_for": ["mood"], "limit": 13, "preview": "embedded",
+    "policy": "https://docs.obsidian.md/Themes/App%20themes/Submit%20your%20theme",
+    "detail": "Published community JSON and publisher-submitted preview files, cached locally only. Theme previews demonstrate different editor moods, not different products."
+  },
+  {
+    "id": "wordpress-themes", "name": "WordPress.org Themes", "kind": "mood", "method": "link", "quality": "variable",
+    "browse_url": "https://wordpress.org/themes/",
+    "policy": "https://api.wordpress.org/robots.txt",
+    "detail": "Public theme directory. The anonymous API is documented, but its host disallows automated access in robots.txt."
+  },
+  {
+    "id": "astro-themes", "name": "Astro Themes", "kind": "mood", "method": "link", "quality": "variable",
+    "browse_url": "https://astro.build/themes/",
+    "policy": "https://astro.build/terms/",
+    "detail": "Public theme directory with free and paid listings. Terms restrict robots and data extraction without permission."
+  },
+  {
+    "id": "shadcn", "name": "shadcn/ui Blocks", "kind": "component", "method": "links", "quality": "strong", "browser_public": true,
+    "browse_url": "https://ui.shadcn.com/blocks", "entry": "https://ui.shadcn.com/blocks",
+    "hosts": ["ui.shadcn.com"], "platforms": ["web", "mobile"],
+    "selector": "a[href^='/view/new-york-v4/'], iframe[src^='/view/new-york-v4/']",
+    "paths": "^/view/new-york-v4/[^/]+$", "title_from_slug": true,
+    "limit": 5,
+    "policy": "https://ui.shadcn.com/docs/registry/api-reference",
+    "detail": "Official open block gallery and preview links. Interactive previews are available on the source page."
+  },
+  {
+    "id": "aceternity", "name": "Aceternity UI", "kind": "component", "method": "registry", "quality": "variable",
+    "browse_url": "https://ui.aceternity.com/components", "entry": "https://ui.aceternity.com/api/components",
+    "hosts": ["ui.aceternity.com", "assets.aceternity.com"],
+    "json_items": "components", "docs_field": "documentationUrl", "image_field": "image",
+    "preview": "embedded", "limit": 8,
+    "policy": "https://ui.aceternity.com/robots.txt",
+    "detail": "Official public components API and listed thumbnails. Pro and blocked preview routes are not accessed; motion-heavy examples can be noisy."
+  },
+  {
+    "id": "magic-ui", "name": "Magic UI", "kind": "component", "method": "registry", "quality": "variable",
+    "browse_url": "https://magicui.design/docs/components", "entry": "https://magicui.design/r/registry.json",
+    "hosts": ["magicui.design"], "item_url": "https://magicui.design/docs/components/{slug}",
+    "types": ["registry:ui"], "limit": 7,
+    "policy": "https://magicui.design/docs/mcp",
+    "detail": "Public component registry and docs links. Strong for individual motion effects, not complete product patterns."
+  },
+  {
+    "id": "hyperui", "name": "HyperUI", "kind": "component", "method": "markdown", "quality": "basic",
+    "browse_url": "https://hyperui.dev/components/application", "entry": "https://hyperui.dev/llms.txt",
+    "hosts": ["hyperui.dev"], "paths": "^/components/[^/]+/[^/]+/?$", "trim_md": true,
+    "limit": 8,
+    "policy": "https://github.com/markmead/hyperui/blob/main/LICENSE",
+    "detail": "Official LLM index and MIT component variants. Solid structural options; the raw examples are baseline rather than distinctive art direction."
+  },
+  {
+    "id": "origin-ui", "name": "Origin UI / Coss", "kind": "component", "method": "links", "quality": "strong",
+    "browse_url": "https://coss.com/origin", "entry": "https://coss.com/origin",
+    "hosts": ["coss.com"], "selector": "a[href^='/origin/']:has(img)", "image_selector": "img",
+    "paths": "^/origin/(?!_next/|search/?$|easings/?$)[a-z-]+/?$", "preview": "embedded", "limit": 8,
+    "policy": "https://github.com/cosscom/ui/blob/main/LICENSE",
+    "detail": "Public categorized pattern gallery; links and gallery-provided thumbnails, not a hidden registry or paid template."
+  },
+  {
+    "id": "tailwind-plus", "name": "Tailwind Plus", "kind": "component", "method": "link", "quality": "strong",
+    "browse_url": "https://tailwindcss.com/plus",
+    "policy": "https://tailwindcss.com/blog/tailwind-plus",
+    "detail": "Current Plus catalog and preview URLs redirect to login. No anonymous collection."
+  },
+  {
+    "id": "designsystems-surf", "name": "designsystems.surf", "kind": "system", "method": "links", "quality": "strong",
+    "browse_url": "https://designsystems.surf/design-systems", "entry": "https://designsystems.surf/design-systems",
+    "hosts": ["designsystems.surf"], "selector": "a[href*='design-systems/']",
+    "paths": "^/design-systems/[^/]+/?$",
+    "system_baseline": ["https://designsystems.surf/design-systems/apple", "https://designsystems.surf/design-systems/google"],
+    "policy": "https://designsystems.surf/public-offer-agreement-digital-products",
+    "detail": "Public design-system directory links only. Pro downloads and their redistribution are out of scope."
+  },
+  {
+    "id": "adele", "name": "Adele by UXPin", "kind": "system", "method": "links", "quality": "variable",
+    "browse_url": "https://adele.uxpin.com/", "entry": "https://adele.uxpin.com/",
+    "hosts": ["adele.uxpin.com"], "selector": "td a[href^='/']", "paths": "^/[a-z][a-z0-9-]+/?$",
+    "system_baseline": ["https://adele.uxpin.com/mozilla-protocol"],
+    "policy": "https://github.com/uxpin/adele",
+    "detail": "Public server-rendered design-system comparison, links only. Verify freshness against the upstream system."
+  },
+  {
+    "id": "component-gallery", "name": "Component Gallery", "kind": "system", "method": "link", "quality": "strong",
+    "browse_url": "https://component.gallery/components/",
+    "policy": "https://component.gallery/robots.txt",
+    "detail": "Anonymous manual cross-system comparisons. The robot policy excludes several AI clients; no collection enabled."
+  },
+  {
+    "id": "krds", "name": "KRDS", "kind": "system", "method": "links", "quality": "strong",
+    "browse_url": "https://www.krds.go.kr/html/site/component/component_summary.html",
+    "entry": "https://www.krds.go.kr/html/site/component/component_summary.html",
+    "hosts": ["www.krds.go.kr"], "selector": "a[href*='component_']",
+    "paths": "^/html/site/component/component_[0-9]+_[0-9]+\\.html$",
+    "system_baseline": ["https://www.krds.go.kr/html/site/component/component_02_01.html"],
+    "policy": "https://www.krds.go.kr/robots.txt",
+    "detail": "Public Korean government component guidance, documentation links only. Useful accessibility and pattern reference."
+  },
+  {
+    "id": "kakao", "name": "Kakao Developers", "kind": "system", "method": "link", "quality": "strong",
+    "browse_url": "https://developers.kakao.com/docs/ko/kakaologin/design-guide",
+    "policy": "https://developers.kakao.com/robots.txt",
+    "detail": "Public Kakao Login brand/design specification. A narrow official design reference, not a searchable screen gallery."
+  },
+  {
+    "id": "toss", "name": "Toss TDS", "kind": "system", "method": "link", "quality": "strong",
+    "browse_url": "https://tossmini-docs.toss.im/tds-mobile/foundation/colors/",
+    "policy": "https://github.com/toss/apps-in-toss-ax",
+    "detail": "The dedicated TDS host returned 403. Apps in Toss publishes a separate TDS docs and authorized documentation CLI/MCP."
+  },
+  {
+    "id": "oh-my-design", "name": "Oh My Design", "kind": "system", "method": "sitemap", "quality": "variable",
+    "browse_url": "https://oh-my-design.kr/ko/design-systems", "entry": "https://oh-my-design.kr/sitemap.xml",
+    "hosts": ["oh-my-design.kr"], "paths": "^/ko/design-systems/[^/]+/?$",
+    "system_baseline": ["https://oh-my-design.kr/ko/design-systems/kakao"],
+    "policy": "https://oh-my-design.kr/robots.txt",
+    "detail": "Public Korean DESIGN.md index. Good token clues, but community descriptions are not first-party product standards."
+  },
+  {
+    "id": "artic", "name": "Art Institute of Chicago", "kind": "mood", "method": "link", "quality": "strong",
+    "browse_url": "https://www.artic.edu/collection",
+    "policy": "https://api.artic.edu/docs/",
+    "detail": "Open artwork metadata API exists; API and IIIF hosts returned HTTP 403 for robots.txt in this environment. No collection attempted."
+  },
+  {"id":"refero","name":"Refero","kind":"screen","method":"link","quality":"strong","browse_url":"https://refero.design/","policy":"https://refero.design/terms","detail":"Actual product patterns; paid MCP and collection restriction. Manual only."},
+  {"id":"screenlane","name":"Screenlane","kind":"screen","method":"link","quality":"strong","browse_url":"https://screenlane.com/","policy":"https://pageflows.com/terms/","detail":"Redirects to Page Flows; not a separate gallery or source of duplicate cards."},
+  {"id":"page-collective","name":"Page Collective","kind":"mood","method":"link","quality":"variable","browse_url":"https://pagecollective.com/","policy":"https://pageflows.com/terms/","detail":"Redirects to Page Flows; not a separate landing-page catalog."},
+  {"id":"pageflows","name":"Page Flows","kind":"screen","method":"sitemap","quality":"strong",
+   "browse_url":"https://pageflows.com/all-screenshots/","entry":"https://pageflows.com/page-sitemap.xml","hosts":["pageflows.com"],
+   "platform_paths":{"web":"^/web/products/[^/]+/$","mobile":"^/ios/products/[^/]+/$"},"limit":6,"policy":"https://pageflows.com/terms/","detail":"Public sitemap product links only; do not collect account-only journeys, video, or licensed media."},
+  {"id":"land-book","name":"Land-book","kind":"mood","method":"links","quality":"strong",
+   "browse_url":"https://land-book.com/design/landing-page","entry":["https://land-book.com/design/pricing-page","https://land-book.com/design/blog","https://land-book.com/design/case-study"],
+   "hosts":["land-book.com","cdn.land-book.com"],"platforms":["web"],"selector":"a.website-item-link[href^='/websites/']","image_selector":"img",
+   "paths":"^/websites/[0-9]+-[^/]+$","entry_context":true,"preview":"embedded","limit":8,"policy":"https://land-book.com/llms.txt","detail":"Published pricing/blog/case-study gallery cards. These are marketing pages, not operating dashboards; Pro filters remain off."},
+  {"id":"lapa","name":"Lapa Ninja","kind":"mood","method":"links","quality":"strong",
+   "browse_url":"https://www.lapa.ninja/","entry":"https://www.lapa.ninja/","hosts":["www.lapa.ninja","cdn.lapa.ninja"],"platforms":["web"],
+   "selector":"a[href^='/post/'][aria-label]","tile_class":"group","title_selector":"h2,h3","image_selector":"img",
+   "paths":"^/post/[^/]+/$","context_selector":"group","preview":"embedded","limit":8,"policy":"https://www.lapa.ninja/robots.txt","detail":"Public gallery and publisher-supplied thumbnails; no API or account-only routes."},
+  {"id":"landingfolio","name":"Landingfolio","kind":"mood","method":"links","quality":"strong",
+   "browse_url":"https://www.landingfolio.com/","entry":"https://www.landingfolio.com/","hosts":["www.landingfolio.com","landingfoliocom.imgix.net"],"platforms":["web"],
+   "selector":"a[href^='/inspiration/post/']:has(img)","image_selector":"img","paths":"^/inspiration/post/[^/]+/?$","preview":"embedded","limit":7,
+   "policy":"https://www.landingfolio.com/robots.txt","detail":"Anonymous landing pages, visible gallery thumbnails; no paid assets or bulk copy."},
+  {"id":"one-page-love","name":"One Page Love","kind":"mood","method":"link","quality":"strong","browse_url":"https://onepagelove.com/","policy":"https://onepagelove.com/robots.txt","detail":"Public manual browsing. Free API key is a separate permission route; feeds are excluded in robots.txt."},
+  {"id":"saas-landing-page","name":"SaaS Landing Page","kind":"mood","method":"links","quality":"strong",
+   "browse_url":"https://saaslandingpage.com/?s={query}","entry":"https://saaslandingpage.com/?s={query}","hosts":["saaslandingpage.com"],"platforms":["web"],
+   "selector":"a[href]:has(img[src*='-380x475.'])","image_selector":"img","paths":"^/[a-z0-9-]+/$","search_tokens":true,"query_search":true,
+   "preview":"embedded","limit":8,"policy":"https://saaslandingpage.com/robots.txt","detail":"Public site search and small gallery previews. Analytics marketing looks, not authenticated product screens."},
+  {"id":"recent","name":"Recent (formerly Godly)","kind":"mood","method":"sitemap","quality":"strong",
+   "browse_url":"https://recent.design/","entry":"https://recent.design/sitemap.xml","hosts":["recent.design","cdn.recent.design"],
+   "paths":"^/i/[a-z0-9]+-[^/]+$","slug_prefix":"^[a-z0-9]+-","preview":"page_image","preview_selector":"img[src*='/items/'][src*='/poster/']","limit":7,
+   "policy":"https://recent.design/robots.txt","detail":"Public posts and previews from the canonical replacement for Godly. Reference use only, not training or redistribution."},
+  {"id":"siteinspire","name":"Siteinspire","kind":"mood","method":"link","quality":"strong","browse_url":"https://www.siteinspire.com/websites","policy":"https://www.siteinspire.com/robots.txt","detail":"Public manual filters and documented anonymous index; robots disallows the API for this crawler and sitemap returned 429. Screenshots have separate rights."},
+  {"id":"awwwards","name":"Awwwards","kind":"mood","method":"link","quality":"strong","browse_url":"https://www.awwwards.com/websites/","policy":"https://www.awwwards.com/terms/","detail":"Public award gallery; declared sitemap returned 404 and commercial media reuse is restricted. Manual only."},
+  {"id":"httpster","name":"Httpster","kind":"mood","method":"link","quality":"strong","browse_url":"https://httpster.net/","policy":"https://httpster.net/robots.txt","detail":"Public editorial gallery; no stable anonymous search/feed or verified collection policy. Manual only."},
+  {"id":"minimal-gallery","name":"Minimal Gallery","kind":"mood","method":"link","quality":"strong","browse_url":"https://minimal.gallery/","policy":"https://minimal.gallery/legal/","detail":"Public minimalist sites; legal notice restricts scraping and bulk downloads."},
+  {"id":"darkmode-design","name":"Dark Mode Design","kind":"mood","method":"sitemap","quality":"strong",
+   "browse_url":"https://www.darkmodedesign.com/","entry":"https://www.darkmodedesign.com/sitemap.xml","hosts":["www.darkmodedesign.com","cdn.prod.website-files.com"],
+   "platforms":["web"],"paths":"^/websites/[^/]+$","preview":"og","limit":4,"policy":"https://www.darkmodedesign.com/robots.txt","detail":"Public Webflow entry sitemap and published preview image. Dark styling does not imply relevant application behavior."},
+  {"id":"collect-ui","name":"Collect UI","kind":"mood","method":"link","quality":"basic","browse_url":"https://collectui.com/","policy":"https://collectui.com/robots.txt","detail":"Public frontend shell; no usable documented anonymous feed or sitemap verified. Challenge shots vary in quality."},
+  {"id":"ui-garage","name":"UI Garage","kind":"screen","method":"link","quality":"basic","browse_url":"https://uigarage.net/","policy":"https://uigarage.net/","detail":"Site displays a closure notice; no live search adapter."},
+  {"id":"nicelydone","name":"Nicelydone","kind":"screen","method":"markdown_cards","quality":"strong",
+   "browse_url":"https://nicelydone.club/examples","entry":"https://nicelydone.club/examples.md","hosts":["nicelydone.club","assets.nicelydone.club"],
+   "platforms":["web"],"only_for":["screen"],"section_paths":"^/examples/screens/[a-z-]+$","paths":"^/examples/screens/[0-9a-f-]{36}/?$",
+   "preview":"embedded","limit":12,"policy":"https://nicelydone.club/robots.txt","detail":"Official public Markdown examples and credited SaaS screenshots, no paid MCP or blocked search route."},
+  {"id":"saasframe","name":"SaaSFrame","kind":"screen","method":"link","quality":"strong","browse_url":"https://www.saasframe.io/","policy":"https://www.saasframe.io/terms","detail":"Public examples and metadata exist. Terms limit automated tooling to designated routes; MCP is the supported path."},
+  {"id":"muzli","name":"Muzli","kind":"mood","method":"link","quality":"variable","browse_url":"https://muz.li/inspiration/","policy":"https://muz.li/terms/","detail":"Public inspiration collections. Screenshot reproduction/redistribution restricted; official MCP requires OAuth."},
+  {"id":"wwit","name":"WWIT","kind":"screen","method":"links","quality":"strong",
+   "browse_url":"https://wwit.design/","entry":"https://wwit.design/","hosts":["wwit.design"],"platforms":["mobile"],"only_for":["screen"],
+   "selector":".c-post-card__media a[href]","image_selector":"img","context_selector":"js-post-card-wrap","paths":"^/20[0-9]{2}/[0-9]{2}/[0-9]{2}/[^/]+/$",
+   "preview":"embedded","limit":5,"policy":"https://wwit.design/robots.txt","detail":"Korean app-flow articles and posted images; home listing only because the announced HTTPS sitemap returned 404."},
+  {"id":"designrefs","name":"Designrefs 디자인 허브","kind":"mood","method":"sitemap","quality":"variable",
+   "browse_url":"https://designrefs.com/","entry":"https://designrefs.com/sitemap.xml","hosts":["designrefs.com"],
+   "paths":"^/[^/]+/[^/]+/?$","limit":5,"policy":"https://designrefs.com/robots.txt","detail":"Public Korean design resource directory; metadata only, not screenshots of listed third-party sites."},
+  {"id":"daangn","name":"당근","kind":"system","method":"link","quality":"strong","browse_url":"https://seed-design.io/","policy":"https://www.daangn.com/robots.txt","detail":"Use the official SEED adapter for Karrot design. The consumer domain blocks multiple AI crawlers and is not a source of reference screens."}
+]

@@ -6,3 +6,6 @@
 CLAUDE.local.md
 /dist/
 /eval-results/
+/.reference-board/
+.reference-board-cache/
+/.ultradesign/

@@ -1,39 +1,36 @@
 ---
 name: ultradesign
-description: Plan, implement, or visually review an interface through reference study, a written design system, component recreation, a separate motion pass, and rendered responsive QA. Use for frontend design, redesign, design systems, and visual polish.
+description: Design a real frontend with human-selected references, a one-question design interview, DESIGN.md and a live system page, two-shot implementation, and replayed UX QA. Use for frontend design, implementation, or review.
 ---
 
 # Ultradesign
 
 <!-- omp-policy:start -->
-Choose the workflow for the user's request: **plan** yields a design contract and verification plan; **review** yields prioritized findings from the current result; **implement** carries the work through rendered verification. Capture and inspect real, relevant references without writing UI code. Record the design system contract before building any screen, including the private recreation. Derive palette, explicit type metrics, alignment and density from the product and the evidence. Start new spacing systems on a 4px grid; follow established systems within the agreed migration scope. Group with type, alignment, space and hairlines, give repeated controls component variants, and reserve at most one elevation treatment for a purposeful floating layer. With the contract in place, recreate the lead reference's treatment with project data, then adapt it piece by piece. Give motion its own pass. At matched viewport widths, compare the actual route and reference, list concrete differences, fix unintentional ones, and recapture. Prepare a shared system only when another consumer needs it.
+Start with a real product, screen and content. Bring the user a numbered visual reference board and wait for their picks. Interview them one question at a time with evidence and a recommendation. Translate their choices into DESIGN.md, generate the tokens, and get approval of the live system page. Recreate the picked reference with the project's components, then adapt it to real content and simplify. Replay real UX tasks across devices, show the resulting screen, and wait for final feedback. Add motion as a separate pass on request.
 <!-- omp-policy:end -->
 
-## Start here
+## Choose the requested outcome
 
-Read the user request, target route or flow, real content, and available references. In an existing project, inspect the screen, the component and token inventory it uses, and the neighboring surfaces it must fit. Record the audience, job, primary action, intended change, and scope. Resolve routine choices from the project; bring up only choices that would materially change the result. Resolve the links below relative to this skill.
+- **Implement:** Run the workflow below with the human at each decision. Carry the chosen images, decisions and observed evidence forward.
+- **Plan:** Frame, gather references, interview, and propose the system, implementation and verification plan. Keep the application unchanged; use research artifacts or the conversation for evidence.
+- **Review:** Establish the real task and existing system, then run the QA baseline and report findings. Keep the application unchanged.
 
-Choose the mode by what the user wants back. “Improve this screen” asks for implementation; “what would you improve?” asks for review or a plan. For “review and fix,” record the initial findings and then implement within the requested scope.
+## Implementation order
 
-- **Plan:** Run 1 → 2. Read 3–5 as planning references for implementation order, motion triggers, and the verification matrix. Include 6 in the plan when sharing is in scope. Deliver decisions, examples, and acceptance checks; keep application files unchanged.
-- **Review:** Establish intent from the brief and relevant contract, source, or references. If the brief and existing UI are the only evidence, state that basis. Run 5 against the current result, using 4 to assess motion and consulting 1–2 for intent when useful. Return findings in order of impact, with evidence and a concrete correction. Keep application files unchanged and label checks that could not be run.
-- **Implement:** Run 1 → 2 → 3 → 4 → 5. Use existing decisions and evidence when they meet the next stage's input contract. Iterate on the smallest stage that owns a finding and rerun the affected checks. Run 6 when the user asks to prepare a system for reuse across consumers.
+| Stage | Evidence and next decision |
+| --- | --- |
+| [1 · Frame](prompts/01-frame.md) | Real product, route, audience, content/assets and primary tasks in `brief.md`. |
+| [2 · Reference board](prompts/02-references.md) | Numbered captures and source ledger. User picks one to three; save `picks.md`. |
+| [3 · Interview](prompts/03-interview.md) | One numbered question at a time. User chooses; save evidence, recommendation and answer in `interview.md`. |
+| [4 · Design system](prompts/04-system.md) | `DESIGN.md` → generated tokens → real `/system`. User reviews and approves the current render. |
+| [5 · Two-shot build](prompts/05-implementation.md) | Reference reconstruction using our components, then real content and simpler hierarchy. Compare both renders. |
+| [6 · UX QA](prompts/06-visual-qa.md) | Remorsearch baseline, scoped fixes, same-scenario replay (up to three fix rounds). |
+| [7 · Final check](prompts/08-final.md) | Show the current screen and QA evidence. User approves or gives specific feedback. |
 
-## Stage handoffs
+Run [motion](prompts/07-motion.md) only on request, with a fresh check of the affected states before approval. [Prepare sharing](prompts/09-sharing.md) only when requested for a system with other consumers.
 
-Read each prompt when its stage starts. Carry its output into the next stage as concrete decisions, links, or artifacts. Keep written handoffs together in the agreed artifact location or the conversation. Use the host's checkpoint mechanism if available, and record where the evidence lives.
+## Checkpoint at decisions
 
-| Stage | Input cue | Required handoff |
-| --- | --- | --- |
-| [1 · References](prompts/01-references.md) | Product job and any supplied material | Actual captures, measured pattern notes and proposed adaptations; no UI code |
-| [2 · Design system](prompts/02-system.md) | Selected patterns and existing project conventions | Written layout, tokens, component contracts and acceptance checks before any UI code |
-| [3 · Implementation](prompts/03-implementation.md) | Written design contract and real content | Private recreation, rendered comparison, then running adapted route and state paths |
-| [4 · Motion](prompts/04-motion.md) | Usable static flow and transitions | Trigger/state motion spec and reduced-motion behavior |
-| [5 · Visual QA](prompts/05-visual-qa.md) | Renderable route, tasks, states and motion spec | Recorded viewport and flow evidence, findings and fix reruns |
-| [6 · Sharing](prompts/06-sharing.md) | Verified components and named consumers | System docs, preview and consumer-verified package as scoped |
+At a gate, show the artifact and the one decision needed, then end the turn. Record the person's explicit selection or approval before moving on. A recommendation, a resume command, and silence each leave the decision open. If the user requests a revision, keep the old evidence, update the artifact, and present the gate again.
 
-## Completion
-
-- **Plan:** A builder can implement the intended route from the design contract, tell how each layout changes, and reproduce the acceptance checks.
-- **Review:** Every finding separates what happened from what is recommended. Every result names the route, state, and conditions observed; unavailable evidence is explicit.
-- **Implement:** The primary task works on the real route. It has been visually inspected at representative and transition widths, with checks for applicable states, keyboard use, and reduced motion. Fix in-scope failures and record their reruns. Mark unverified checks and their specific constraints. For shared systems, include evidence from a consuming project.
+In OMP use `ultradesign_checkpoint` and the owner commands displayed for the gate. On other hosts keep a private `progress.md` beside the run artifacts with the current stage, pending decision, completed evidence, and exact accepted choices, and read it on resume. Keep `DESIGN.md` as the source of system values; progress and interviews record how the decisions were made.

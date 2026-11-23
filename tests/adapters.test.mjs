@@ -7,6 +7,7 @@ import { adapterFiles, generate, hosts, install, installDirectory, main } from '
 
 const surfaces = JSON.parse(await readFile(new URL('./fixtures/adapters-surfaces.json', import.meta.url), 'utf8'));
 const canonical = await readFile(new URL('../skills/ultradesign/SKILL.md', import.meta.url), 'utf8');
+const { version } = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 const normalized = (files) => [...files].map(([name, bytes]) => [name, bytes.toString()]);
 async function sandbox(t) {
   const directory = await mkdtemp(path.join(tmpdir(), 'ultradesign-adapters-'));
@@ -22,6 +23,13 @@ for (const host of hosts) {
     const name = internal ? 'ultradesign-workflow' : 'ultradesign';
     assert.equal(files.get(`skills/${name}/SKILL.md`).toString(), internal
       ? canonical.replace(/^name: ultradesign\r?$/m, 'name: ultradesign-workflow') : canonical);
+    for (const relative of [
+      'prompts/01-frame.md', 'prompts/02-references.md', 'prompts/03-interview.md',
+      'prompts/04-system.md', 'prompts/05-implementation.md', 'prompts/06-visual-qa.md',
+      'prompts/07-motion.md', 'prompts/08-final.md', 'prompts/09-sharing.md',
+      'scripts/reference-board', 'scripts/palette-board', 'scripts/design-tokens', 'scripts/design-lint',
+      'assets/templates/interview-log.md', 'assets/templates/system-page/README.md',
+    ]) assert.ok(files.has(`skills/${name}/${relative}`), `${host} bundle missing ${relative}`);
     const adapters = [...files.keys()].filter((file) => !file.startsWith(`skills/${name}/`) && !file.startsWith('adapters/omp/'));
     assert.deepEqual(adapters, surfaces[host]);
     for (const [filename, content] of files) {
@@ -36,6 +44,7 @@ for (const host of hosts) {
       }
       const token = host === 'gemini' ? '{{args}}' : '$ARGUMENTS';
       assert.ok(text.includes(token));
+      assert.match(text, /explicit human decisions/);
       const task = 'review "quoted screen" 한글  spacing';
       assert.ok(text.replace(token, task).includes(task));
       assert.ok(!text.includes('!{'));
@@ -55,6 +64,8 @@ for (const host of hosts) {
       assert.ok(files.has('adapters/omp/index.ts'));
       assert.deepEqual(JSON.parse(files.get('package.json')).omp.extensions, ['./adapters/omp/index.ts']);
     }
+    const manifest = { omp: 'package.json', antigravity: 'plugin.json', gemini: 'gemini-extension.json' }[host];
+    if (manifest) assert.equal(JSON.parse(files.get(manifest)).version, version);
   });
 
   for (const scope of ['project', 'user']) {
@@ -109,6 +120,8 @@ test('generation is repeatable and invalid CLI arguments fail closed', async (t)
   const second = await generate('all', { outDir });
   assert.equal(first.length, hosts.length);
   assert.ok(second.every((result) => result.written === 0));
+  const external = path.join(outDir, 'release');
+  assert.equal((await main(['generate', 'omp', '--out', external]))[0].destination, path.join(external, 'omp'));
   await assert.rejects(main(['install', 'claude']), /Usage/);
   await assert.rejects(main(['install', 'claude', '--scope', 'global']), /Explicit --scope/);
   await assert.rejects(main(['generate', 'unknown']), /Unknown host/);
