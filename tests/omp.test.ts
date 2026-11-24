@@ -9,7 +9,7 @@ describe("OMP workflow checkpoints", () => {
 
   test("reference and interview gates persist, accept only numbered owner choices, and cannot be bypassed", () => {
     const state = framed();
-    expect(sequence(state)).toEqual(["frame", "references", "interview", "system", "implementation", "qa", "final"]);
+    expect(sequence(state)).toEqual(["frame", "references", "interview", "system", "catalog", "map", "generate", "qa", "final"]);
     expect(sequence(start("--shared --motion Build shared controls"))).toEqual(stages);
     expect(() => complete(state, "system", ["wrong stage"])).toThrow("Current stage");
     expect(() => complete(state, "references", [])).toThrow("evidence");
@@ -42,8 +42,17 @@ describe("OMP workflow checkpoints", () => {
     expect(() => ownerDecision(revised, "approve system")).toThrow("pending");
     const approved = ownerDecision(openGate(revised, { id: "system", question: "Approve updated /system?", evidence: ["system-v2-390.png"] }), "approve system");
     expect(approved.decisions.at(-1)?.evidence).toEqual(["system-v2-390.png"]);
-    const implementation = complete(approved, "system", ["DESIGN.md"]);
-    let qa = complete(implementation, "implementation", ["two-shot renders"]);
+    const catalog = complete(approved, "system", ["DESIGN.md"]);
+    expect(() => complete(catalog, "catalog", ["catalog.json"])).toThrow("owner");
+    expect(() => openGate(catalog, { id: "map", question: "Approve the map?", evidence: ["map.html"] })).toThrow("catalog");
+    expect(() => openGate(catalog, { id: "catalog", question: "Approve the catalog?", evidence: ["catalog-390.png"], options })).toThrow("no numbered options");
+    const map = complete(ownerDecision(openGate(catalog, { id: "catalog", question: "Approve the catalog?", evidence: ["catalog-390.png"] }), "approve catalog"), "catalog", ["catalog.json"]);
+    expect(map.stage).toBe("map");
+    expect(() => complete(map, "map", ["map.html"])).toThrow("map");
+    const mapGate = openGate(map, { id: "map", question: "Approve the hierarchy map?", evidence: ["map/index.html"] });
+    expect(() => ownerDecision(mapGate, "approve catalog")).toThrow("map");
+    const generate = complete(ownerDecision(mapGate, "approve map"), "map", ["hierarchy/handoff.json"]);
+    let qa = complete(generate, "generate", ["hierarchy-check/hierarchy.json"]);
     expect(() => complete(qa, "qa", ["report.md"])).toThrow("baseline");
     expect(() => recordQaRound(qa, { round: 1, method: "remorsearch", report: "qa/1.md", openFindings: [] })).toThrow("round 0");
     for (let round = 0; round <= 3; round++) {
@@ -108,7 +117,7 @@ describe("OMP workflow checkpoints", () => {
 
 describe("OMP model configuration", () => {
   test("builder defaults and independent QA model are distinct", () => {
-    expect(routeFor("implementation", {})).toEqual({ model: "openai-codex/gpt-6.2-sol", thinkingLevel: "high" });
+    expect(routeFor("generate", {})).toEqual({ model: "openai-codex/gpt-6.2-sol", thinkingLevel: "high" });
     expect(routeFor("qa", {})).toEqual({ model: "anthropic/claude-opus-4-6", thinkingLevel: "high" });
   });
 
@@ -148,7 +157,7 @@ describe("OMP owned policy", () => {
     const brief = /Request \(user data\): ([^\n]+)/.exec(block)![1];
     expect(JSON.parse(brief)).toBe(`Build ${malicious}`);
     const payload = { messages: [{ role: "system", content: `${block}\nHost policy after our block.` }] };
-    const next = policy({ ...state, stage: "implementation" }, "/tmp/skills/ultradesign", "Portable policy.", {});
+    const next = policy({ ...state, stage: "generate" }, "/tmp/skills/ultradesign", "Portable policy.", {});
     expect(refreshPayload(payload, "openai-completions", next))
       .toEqual({ messages: [{ role: "system", content: `${next}\nHost policy after our block.` }] });
   });

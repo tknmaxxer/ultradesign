@@ -1,7 +1,7 @@
 {
   "name": "ultradesign",
-  "version": "0.4.0",
-  "description": "Human-guided frontend design, implementation, and UX replay.",
+  "version": "0.5.0",
+  "description": "Human-guided frontend design: references, DESIGN.md, A2UI catalog, hierarchy-checked generation, and UX replay.",
   "type": "module",
   "files": ["adapters/", "skills/"],
   "omp": {

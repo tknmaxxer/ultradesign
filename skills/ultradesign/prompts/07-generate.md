@@ -1,0 +1,6 @@
+# Generate, validate and render the screen
+
+1. Generate one A2UI v1.0 `createSurface` message per screen from the brief's real content, the approved catalog (including its `instructions`) and the approved `hierarchy.json`. Use the table's component IDs and emphasis exactly, the approved frame as the root layout, and bind longer text through `dataModel`.
+2. Run `scripts/a2ui-validate --catalog … --screen … --hierarchy …`. Give findings back to the generator verbatim and regenerate until it passes; a finding that needs a new component or frame goes back to the catalog gate instead.
+3. Run the renderer's build (the guard runs first), start it, and run `scripts/hierarchy-check --url … --hierarchy … --out …` at 390, 768 and 1440 or the agreed device widths. When a check fails, decide where the fault lives: the screen JSON (regenerate), the renderer's emphasis mapping or a frame (fix the catalog implementation and show the change at the next gate), or the table itself (ask the owner).
+4. Open the first-view and full-page PNGs yourself at every width. Compare against the approved map and picked references; note anything that reads as filler, empty or repeated. Send the route, tasks, approved system, catalog and tables to QA.

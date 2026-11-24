@@ -55,7 +55,7 @@ const gate = id => ({
   name: "ultradesign_checkpoint",
   arguments: { action: "gate", gate: {
     id, question: `Review ${id}?`, evidence: [`${id}.html`],
-    ...(["system", "final"].includes(id) ? {} : {
+    ...(["system", "catalog", "map", "final"].includes(id) ? {} : {
       options: [
         { number: 1, label: "First", evidence: `${id}.html#first` },
         { number: 2, label: "Second", evidence: `${id}.html#second` },
@@ -114,7 +114,7 @@ const server = Bun.serve({
           } };
         } else {
           const nextGate = stage === "interview" ? interview.find(id => !decisions.some(decision => decision.id === id))
-            : (["references", "final"].includes(stage) || (stage === "system" && scenario !== "plan")) ? stage : undefined;
+            : (["references", "catalog", "map", "final"].includes(stage) || (stage === "system" && scenario !== "plan")) ? stage : undefined;
           tool = nextGate && !decisions.some(decision => decision.id === nextGate) ? gate(nextGate) : checkpoint(stage);
         }
       }
@@ -243,6 +243,12 @@ try {
   await client.prompt("/ud revise system Show the pressed state");
   assert.equal(received.at(-1).pending.id, "system");
   await client.prompt("/ultradesign approve system");
+  assert.equal(received.at(-1).pending.id, "catalog");
+  await client.prompt("/ud approve catalog");
+  assert.equal(received.at(-1).pending.id, "map");
+  await client.prompt("/ud revise map Make the retry check P1");
+  assert.equal(received.at(-1).pending.id, "map");
+  await client.prompt("/ud approve map");
   assert.equal(received.at(-1).pending.id, "final");
   assert(!received.some(item => item.scenario === "resume" && item.stage === "motion"));
   await client.prompt("/ud approve final");
@@ -269,10 +275,9 @@ try {
   await client.prompt("/ultradesign --motion --shared Build a system for two fixture projects");
   await client.prompt("/ud pick 2");
   for (const id of interview) await client.prompt(`/ud answer ${id} 2`);
-  await client.prompt("/ud approve system");
-  await client.prompt("/ud approve final");
+  for (const id of ["system", "catalog", "map", "final"]) await client.prompt(`/ud approve ${id}`);
   assert.deepEqual(visited("shared"),
-    ["frame", "references", "interview", "system", "implementation", "qa", "motion", "final", "sharing", "done"]);
+    ["frame", "references", "interview", "system", "catalog", "map", "generate", "qa", "motion", "final", "sharing", "done"]);
   await client.prompt("/ud status", false);
   await client.prompt("/ud off", false);
   scenario = "off";
@@ -293,7 +298,7 @@ try {
   assert(refreshed, "No mid-turn state refresh was observed");
   const main = received.filter(item => !item.child && item.stage);
   for (const item of main) {
-    const expected = { references: "reference", system: "architect", implementation: "builder", motion: "builder", qa: "judge", sharing: "builder" }[item.stage];
+    const expected = { references: "reference", system: "architect", catalog: "builder", map: "builder", generate: "builder", motion: "builder", qa: "judge", sharing: "builder" }[item.stage];
     if (expected) assert.equal(item.payload.model, expected, `Wrong native model route for ${item.stage}`);
     assert(systemText(item.payload).includes(join(copied, "skills/ultradesign/SKILL.md")));
     assert.equal((systemText(item.payload).match(/<omp-ultradesign-policy>/g) || []).length, 1);
@@ -302,8 +307,8 @@ try {
   const states = entries.filter(entry => entry.type === "custom" && entry.customType === "ultradesign:state");
   assert(states.some(entry => entry.data.pending?.id === "references" && !entry.data.decisions.length));
   assert(states.some(entry => entry.data.pending?.id === "direction" && entry.data.decisions[0]?.choices.join() === "1,2"));
-  assert(states.some(entry => entry.data.checkpoints.length === 7 && entry.data.stage === "done"));
-  assert(states.some(entry => entry.data.shared && entry.data.motion && entry.data.checkpoints.length === 9 && entry.data.stage === "done"));
+  assert(states.some(entry => entry.data.checkpoints.length === 9 && entry.data.stage === "done"));
+  assert(states.some(entry => entry.data.shared && entry.data.motion && entry.data.checkpoints.length === 11 && entry.data.stage === "done"));
   assert.equal(states.at(-1).data.active, false);
   console.log(`OMP installed-host checks passed: aliases, persisted owner gates, no gate skip, read-only modes, QA baseline, optional motion/sharing, model routes, native parallel task, targeted payload refresh. Evidence: ${temporary}`);
 } finally {

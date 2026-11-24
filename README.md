@@ -1,10 +1,10 @@
-# Ultradesign v0.4
+# Ultradesign v0.5
 
 [한국어](#한국어) · [English](#english)
 
 ## 한국어
 
-레퍼런스는 에이전트가 모으고, 어떤 디자인이 맞는지는 사람이 고릅니다. 고른 화면을 바탕으로 시스템을 만들고, 확인받은 뒤 실제 UI를 구현하고 검증합니다.
+레퍼런스는 에이전트가 모으고, 어떤 디자인이 맞는지는 사람이 고릅니다. 고른 화면을 바탕으로 시스템과 A2UI 컴포넌트 카탈로그를 만들고, 화면마다 무엇이 먼저 보여야 하는지 확인받은 뒤 화면을 생성하고 검증합니다.
 
 ### 시작하기
 
@@ -28,9 +28,11 @@ OMP·Claude Code·Antigravity·OpenCode·Cursor·Gemini CLI에서는 `/ud` 또�
 2. 핵심 갤러리와 화면에 맞는 공개 출처를 살펴 번호가 붙은 보드를 만듭니다. 사용자가 1–3개를 고릅니다.
 3. 방향·폰트·팔레트·상태 표시·밀도를 한 번에 하나씩 묻습니다. 각 선택지에 실제 근거를 붙이고 추천과 사용자 결정을 따로 기록합니다.
 4. 선택을 Google Labs 형식 `DESIGN.md`에 반영하고 `tokens.css`를 생성합니다. 실제 컴포넌트 변형이 보이는 `/system`을 사용자에게 확인받습니다. 신규 프로젝트의 기본은 Vite + React, Base UI, CSS Modules입니다. 기존 스택은 유지합니다.
-5. 고른 레퍼런스의 구도를 우리 컴포넌트로 먼저 재현합니다. 다음 샷에서 실제 콘텐츠와 동작을 연결하고 불필요한 시각 요소를 덜어냅니다.
-6. [Remorsearch UX QA](https://github.com/remorser58/remorsearch_ux_qa_skill)로 데스크톱·태블릿·휴대폰의 과업을 점검합니다. 기준선 이후 같은 시나리오에서 수정·재실행을 최대 세 번 반복합니다. 외부 스킬이 없으면 로컬 검증으로 진행하고 범위 차이를 명시합니다.
-7. 실제 화면과 QA 근거를 보여주고 최종 확인을 받습니다. 모션은 요청이 있을 때 별도로 검증합니다.
+5. 시스템 컴포넌트를 [A2UI v1.0](https://github.com/a2ui-project/a2ui) 카탈로그로 노출합니다. 레이아웃 프레임은 승인된 화면과 고른 레퍼런스를 재현해 만들고, 컴포넌트는 크기 대신 강조 역할(P1/P2/P3, 주·보조 행동)을 받습니다. 빌드 가드가 색 리터럴·임의 글자 크기·토큰 밖 글꼴·인라인 스타일을 막습니다. 사용자가 카탈로그를 승인합니다.
+6. 화면(또는 랜딩 섹션)마다 위계 표를 확인받습니다. P1 하나, P2·P3, 주 행동 하나, 프레임, 글자 수 한도. 여러 섹션이면 번호 붙은 섹션 맵으로 보여줍니다.
+7. 카탈로그와 위계 표로 A2UI JSON을 생성하고 검증합니다(스키마, 렌더러 식별자 규칙, 바인딩, 위계 표). 렌더 후 세 폭에서 P1이 가장 크게 첫 화면에 있고 주 행동이 첫 화면에 하나뿐인지 검사합니다.
+8. [Remorsearch UX QA](https://github.com/remorser58/remorsearch_ux_qa_skill)로 데스크톱·태블릿·휴대폰의 과업을 점검합니다. 기준선 이후 같은 시나리오에서 수정·재실행을 최대 세 번 반복합니다. 외부 스킬이 없으면 로컬 검증으로 진행하고 범위 차이를 명시합니다.
+9. 실제 화면, 위계 검사와 QA 근거를 보여주고 최종 확인을 받습니다. 모션은 요청이 있을 때 별도로 검증합니다.
 
 ![Cataly Ops /system의 시맨틱 색과 타이포그래피 견본](assets/readme/system-foundations.png)
 
@@ -44,10 +46,13 @@ OMP·Claude Code·Antigravity·OpenCode·Cursor·Gemini CLI에서는 `/ud` 또�
 /ud pick 2,5 정보 구조는 2번, 행동 버튼 위계는 5번
 /ud answer direction 2
 /ud approve system
+/ud approve catalog
+/ud revise map 3번 섹션은 설치 경로를 P1로
+/ud approve map
 /ud approve final
 ```
 
-현재 단계와 질문은 `/ud status` 또는 `/ud resume`으로 확인합니다. `/ud revise <gate-id> <피드백>`은 같은 게이트에서 다시 검토하고, `/ud off`는 정책을 끕니다. `--motion`은 최종 확인 전 모션 패스를, `--shared`는 확인 후 공용 시스템 패키징을 추가합니다. v0.3 이전 세션에서는 저장된 근거를 보존하고 새 `/ud` 작업으로 시작합니다. 다른 하네스는 작업 기록과 대화에서 같은 결정 순서를 따릅니다.
+현재 단계와 질문은 `/ud status` 또는 `/ud resume`으로 확인합니다. `/ud revise <gate-id> <피드백>`은 같은 게이트에서 다시 검토하고, `/ud off`는 정책을 끕니다. `--motion`은 최종 확인 전 모션 패스를, `--shared`는 확인 후 공용 시스템 패키징을 추가합니다. v0.4 이전 세션에서는 저장된 근거를 보존하고 새 `/ud` 작업으로 시작합니다. 그동안의 결정과 실패 기록은 [docs/lessons.md](docs/lessons.md)에 있습니다. 다른 하네스는 작업 기록과 대화에서 같은 결정 순서를 따릅니다.
 
 ## English
 
@@ -71,17 +76,19 @@ Use `/ud` or `/ultradesign` in OMP, Claude Code, Antigravity, OpenCode, Cursor, 
 2. Review a numbered board of task-specific references. Pick one to three and say what to keep.
 3. Answer one evidence-backed question at a time: direction, type, palette, status treatment and density. The agent recommends one option and records your decision.
 4. Review the live `/system` built from Google Labs `DESIGN.md` and generated tokens. New projects start with Vite + React, Base UI and CSS Modules; existing projects keep their stack.
-5. Reconstruct the reference with your components, then adapt it to real content and behavior. Simplify visual grouping in the second shot.
-6. Replay real UX tasks at desktop, tablet and phone sizes with Remorsearch. Fix and rerun the same scenarios in up to three rounds after the baseline. Without the external skill, the local fallback reports what it could check.
-7. Confirm the current build in the final review. Motion is a separate, opt-in pass.
+5. Approve an [A2UI v1.0](https://github.com/a2ui-project/a2ui) catalog of your system components. Layout frames are recreated from approved screens and picked references; components take emphasis roles (P1/P2/P3, primary/secondary action) instead of sizes. A build guard rejects color literals, raw font sizes, off-token fonts and inline styles.
+6. Approve a hierarchy table per screen or landing section: one P1, supporting P2/P3 items, one primary action, a frame and word budgets. Multi-section pages get a numbered section map.
+7. The agent generates A2UI JSON against the catalog and table, validates it (schema, renderer identifier rules, bindings, the table), renders it, and checks at three widths that P1 has the largest type in the first view and that the single primary action is in the first view.
+8. Replay real UX tasks at desktop, tablet and phone sizes with Remorsearch. Fix and rerun the same scenarios in up to three rounds after the baseline. Without the external skill, the local fallback reports what it could check.
+9. Confirm the current build, its hierarchy check and QA evidence in the final review. Motion is a separate, opt-in pass.
 
 See the [/system and approved screen examples](#진행-순서) above.
 
 ### OMP checkpoints
 
-Use `/ud pick 2,5 [why]`, `/ud answer direction 2`, `/ud approve system`, and `/ud approve final` at the corresponding gates. Use `/ud revise <gate-id> <feedback>` to request an updated artifact. `/ud status` reads the checkpoint, `/ud resume` returns to it, and `/ud off` deactivates the workflow. Optional `--motion` adds a pass before final review; `--shared` prepares sharing after approval. Start a new workflow when upgrading earlier sessions; legacy progress does not count as v0.4 approval.
+Use `/ud pick 2,5 [why]`, `/ud answer direction 2`, `/ud approve system`, `/ud approve catalog`, `/ud approve map`, and `/ud approve final` at the corresponding gates. Use `/ud revise <gate-id> <feedback>` to request an updated artifact. `/ud status` reads the checkpoint, `/ud resume` returns to it, and `/ud off` deactivates the workflow. Optional `--motion` adds a pass before final review; `--shared` prepares sharing after approval. Start a new workflow when upgrading earlier sessions; legacy progress does not count as v0.5 approval. Decisions and failures behind v0.5: [docs/lessons.md](docs/lessons.md).
 
-OMP keeps stage-routing settings: `ULTRADESIGN_MODEL` and `ULTRADESIGN_THINKING_LEVEL` set common defaults. `ULTRADESIGN_MODELS='{"qa":{"model":"provider/judge","thinkingLevel":"high"}}'` overrides by stage (`frame`, `references`, `interview`, `system`, `implementation`, `qa`, `motion`, `final`, `sharing`). Default build routing is Sol 6.2 high; QA uses Opus 4.6 high. Use models available to your harness.
+OMP keeps stage-routing settings: `ULTRADESIGN_MODEL` and `ULTRADESIGN_THINKING_LEVEL` set common defaults. `ULTRADESIGN_MODELS='{"qa":{"model":"provider/judge","thinkingLevel":"high"}}'` overrides by stage (`frame`, `references`, `interview`, `system`, `catalog`, `map`, `generate`, `qa`, `motion`, `final`, `sharing`). Default build routing is Sol 6.2 high; QA uses Opus 4.6 high. Use models available to your harness.
 
 ## Tools
 
@@ -92,9 +99,14 @@ scripts/reference-board 'developer tool landing hero' --kind mood --platform web
 scripts/palette-board --input palettes.json --out palette.html
 scripts/design-tokens DESIGN.md --out src/tokens.css --catalog src/catalog.generated.json
 scripts/design-lint DESIGN.md
+scripts/a2ui-validate --catalog catalog.json --screen screen.json --hierarchy hierarchy.json
+scripts/hierarchy-check --url http://127.0.0.1:5173/?screen=handoff --hierarchy hierarchy.json --out qa/hierarchy
+scripts/screen-map hierarchy/*.json --out map/index.html
 ```
 
-With permission to use the owner's Chrome, add `--cdp http://127.0.0.1:9222` and repeat `--candidate URL "What to compare"` for eligible first-party pages. The tool opens fresh read-only tabs and records access gaps. Manual-only sources stay browse links. With no CDP connection the public adapters work independently. Keep the board, sourced captures and interview artifacts private. Install `uv` and Playwright Chromium for rendering, and use the upstream Google Labs CLI for lint. Details: [workflow](skills/ultradesign/SKILL.md) · [source catalog](skills/ultradesign/references/catalog.md) · [method notes](references/method-trace.md).
+The [build guard](skills/ultradesign/assets/templates/guard/README.md) is a template the agent installs in the renderer project as `prebuild`.
+
+With permission to use the owner's Chrome, add `--cdp http://127.0.0.1:9222` and repeat `--candidate URL "What to compare"` for eligible first-party pages. The tool opens fresh read-only tabs and records access gaps. Manual-only sources stay browse links. With no CDP connection the public adapters work independently. Keep the board, sourced captures and interview artifacts private. Install `uv` and Playwright Chromium for rendering, and use the upstream Google Labs CLI for lint. Details: [workflow](skills/ultradesign/SKILL.md) · [source catalog](skills/ultradesign/references/catalog.md) · [A2UI catalog guide](skills/ultradesign/references/a2ui.md) · [hierarchy guide](skills/ultradesign/references/hierarchy.md) · [method notes](references/method-trace.md).
 
 소유자가 명시적으로 허용한 실제 제품 화면은 `--target-url URL`로 추가합니다. 비교 후보와 분리해서 캡처하며, 해당 URL에만 `robots.txt` 검사 예외를 적용합니다. 제3자 출처의 정책과 브라우저 접근 제한은 유지합니다.
 
@@ -106,9 +118,10 @@ Add `--target-url URL` for each explicitly authorized product page. Current-scre
 bun test
 bun run test:host
 node tests/visual-qa-smoke.mjs
+uv run --script tests/a2ui-tools-smoke.py
 skills-ref validate skills/ultradesign
-node scripts/adapters.mjs generate all --out dist/v0.4.0
+node scripts/adapters.mjs generate all --out dist/v0.5.0
 git diff --check
 ```
 
-Generated adapters are local bundles, not published packages. The [historical one-shot evals](evals/README.md) are retained for v0.1–v0.3 provenance; they do not measure v0.4.
+Generated adapters are local bundles, not published packages. The [historical one-shot evals](evals/README.md) are retained for v0.1–v0.3 provenance; they do not measure v0.4 or later. The [v0.5 hierarchy eval](evals/v05/README.md) compares generation with and without the hierarchy layer.

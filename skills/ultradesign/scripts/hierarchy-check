@@ -1,0 +1,192 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["playwright==1.65.1"]
+# ///
+"""Check a rendered A2UI screen against its hierarchy at several widths.
+
+The renderer marks the generated area with data-ud-surface and each catalog
+component root with data-ud-id, data-ud-component and data-ud-emphasis. Per
+width this checks: exactly one P1, shown in the first viewport, whose largest
+type is strictly larger than any other text in the surface; P2 type at least as
+large as P3 type; exactly one primary action, fully inside the first viewport.
+With --hierarchy it also checks that every approved item renders with the
+emphasis the owner approved and that the primary action is the approved one.
+
+It measures type size and position. Whether P1 says the right thing remains
+the owner's call at the hierarchy gate.
+
+Exit codes: 0 pass, 1 failed checks, 2 usage or load error.
+"""
+
+import argparse
+import json
+import os
+from pathlib import Path
+import sys
+from urllib.parse import urlsplit
+
+PROBE = r"""() => {
+    const surfaces = document.querySelectorAll("[data-ud-surface]");
+    const error = document.querySelector("[data-ud-error]");
+    if (surfaces.length !== 1) return { surfaces: surfaces.length, error: error?.textContent?.trim() ?? null };
+    const surface = surfaces[0];
+    const visible = el => {
+        const s = getComputedStyle(el);
+        return el.getClientRects().length > 0 && s.visibility === "visible" && s.opacity !== "0";
+    };
+    const texts = [];
+    for (const el of surface.querySelectorAll("*")) {
+        if (!visible(el)) continue;
+        const own = Array.from(el.childNodes).some(n => n.nodeType === Node.TEXT_NODE && n.textContent.trim());
+        const control = el.matches("input, textarea, select");
+        if (!own && !control) continue;
+        texts.push({ el, size: parseFloat(getComputedStyle(el).fontSize),
+                     owner: el.closest("[data-ud-id]")?.getAttribute("data-ud-id") ?? null });
+    }
+    const components = [];
+    for (const el of surface.querySelectorAll("[data-ud-id]")) {
+        const rect = el.getBoundingClientRect();
+        const inside = texts.filter(t => el.contains(t.el));
+        components.push({
+            id: el.getAttribute("data-ud-id"),
+            component: el.getAttribute("data-ud-component"),
+            emphasis: el.getAttribute("data-ud-emphasis"),
+            visible: visible(el) && rect.width > 0 && rect.height > 0,
+            top: rect.top + scrollY, bottom: rect.bottom + scrollY, left: rect.left, right: rect.right,
+            maxFont: inside.length ? Math.max(...inside.map(t => t.size)) : 0,
+            text: (el.innerText || "").trim().slice(0, 120),
+        });
+    }
+    return {
+        surfaces: 1, error: error?.textContent?.trim() ?? null,
+        viewportHeight: innerHeight, viewportWidth: innerWidth,
+        horizontalOverflowPx: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
+        components,
+        texts: texts.map(t => ({ size: t.size, owner: t.owner,
+            inP1: !!t.el.closest('[data-ud-emphasis="p1"]'), text: t.el.textContent.trim().slice(0, 60) })),
+    };
+}"""
+
+
+def positive(value):
+    number = int(value)
+    if number < 1:
+        raise argparse.ArgumentTypeError("expected a positive integer")
+    return number
+
+
+def load_table(path):
+    if not path:
+        return None
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise SystemExit(f"error: cannot read {path}: {error}") from None
+
+
+def evaluate(probe, table):
+    failures = []
+    if probe.get("error"):
+        return [f"Renderer reported an error: {probe['error'][:200]}"]
+    if probe.get("surfaces") != 1:
+        return [f"Expected one [data-ud-surface], found {probe.get('surfaces')}."]
+    height = probe["viewportHeight"]
+    components = [c for c in probe["components"] if c["visible"]]
+    by_id = {c["id"]: c for c in components}
+    p1 = [c for c in components if c["emphasis"] == "p1"]
+    if len(p1) != 1:
+        failures.append(f"Expected exactly one P1, found {len(p1)}: {[c['id'] for c in p1]}.")
+    else:
+        lead = p1[0]
+        if lead["top"] >= height:
+            failures.append(f"P1 {lead['id']!r} starts at y={lead['top']:.0f}, below the first viewport ({height}px).")
+        others = [t for t in probe["texts"] if not t["inP1"]]
+        rival = max(others, key=lambda t: t["size"], default=None)
+        if rival and rival["size"] >= lead["maxFont"]:
+            failures.append(f"P1 {lead['id']!r} type {lead['maxFont']:.0f}px does not dominate: "
+                            f"{rival['text']!r} in {rival['owner']!r} is {rival['size']:.0f}px.")
+    p2 = [c for c in components if c["emphasis"] == "p2"]
+    p3 = [c for c in components if c["emphasis"] == "p3"]
+    if p2 and p3:
+        weakest = min(p2, key=lambda c: c["maxFont"])
+        loudest = max(p3, key=lambda c: c["maxFont"])
+        if loudest["maxFont"] > weakest["maxFont"]:
+            failures.append(f"P3 {loudest['id']!r} ({loudest['maxFont']:.0f}px) is louder than P2 {weakest['id']!r} ({weakest['maxFont']:.0f}px).")
+    primary = [c for c in components if c["emphasis"] == "primary"]
+    if len(primary) != 1:
+        failures.append(f"Expected exactly one primary action, found {len(primary)}: {[c['id'] for c in primary]}.")
+    elif primary[0]["top"] < 0 or primary[0]["bottom"] > height:
+        failures.append(f"Primary action {primary[0]['id']!r} spans y={primary[0]['top']:.0f}–{primary[0]['bottom']:.0f}, "
+                        f"outside the first viewport ({height}px).")
+    if table:
+        for item in table.get("items", []):
+            expected = {1: "p1", 2: "p2", 3: "p3"}.get(item.get("priority")) or (
+                "primary" if item.get("id") == table.get("primaryAction") else "secondary")
+            rendered = by_id.get(item.get("id"))
+            if not rendered:
+                failures.append(f"Approved item {item.get('id')!r} is not visible.")
+            elif rendered["emphasis"] != expected:
+                failures.append(f"{item['id']!r} renders as {rendered['emphasis']!r}; approved {expected!r}.")
+        if len(primary) == 1 and primary[0]["id"] != table.get("primaryAction"):
+            failures.append(f"Primary action is {primary[0]['id']!r}; approved {table.get('primaryAction')!r}.")
+    if probe.get("horizontalOverflowPx"):
+        failures.append(f"Horizontal overflow of {probe['horizontalOverflowPx']}px.")
+    return failures
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--url", required=True, help="rendered screen (http, https, or file URL)")
+    parser.add_argument("--out", type=Path, required=True, help="directory for first-view PNGs and hierarchy.json results")
+    parser.add_argument("--hierarchy", help="owner-approved hierarchy.json")
+    parser.add_argument("--width", type=positive, action="append", help="CSS widths (default 390, 768, 1440)")
+    parser.add_argument("--height", type=positive, action="append",
+                        help="first-viewport height per width, in the same order (default 844 for <600px, else 900)")
+    parser.add_argument("--chromium-path", default=os.environ.get("UD_CHROMIUM_PATH"))
+    parser.add_argument("--timeout", type=positive, default=30000, help="per-action timeout in milliseconds")
+    args = parser.parse_args()
+    if urlsplit(args.url).scheme not in {"http", "https", "file"}:
+        parser.error("--url must be http, https, or file")
+    widths = args.width or [390, 768, 1440]
+    if args.height and len(args.height) != len(widths):
+        parser.error("give one --height per --width")
+    heights = args.height or [844 if width < 600 else 900 for width in widths]
+    table = load_table(args.hierarchy)
+
+    from playwright.sync_api import sync_playwright
+
+    args.out.mkdir(parents=True, exist_ok=True)
+    results = []
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(executable_path=args.chromium_path)
+        for width, height in zip(widths, heights):
+            page = browser.new_page(viewport={"width": width, "height": height}, device_scale_factor=1)
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            try:
+                response = page.goto(args.url, wait_until="load", timeout=args.timeout)
+                if response and not response.ok:
+                    raise SystemExit(f"error: HTTP {response.status} at {args.url}")
+                page.wait_for_selector("[data-ud-surface], [data-ud-error]", timeout=args.timeout)
+                page.evaluate("() => document.fonts.ready")
+                page.screenshot(path=args.out / f"first-{width}.png")
+                page.screenshot(path=args.out / f"full-{width}.png", full_page=True)
+                probe = page.evaluate(PROBE)
+                failures = evaluate(probe, table) + [f"Page error: {error[:200]}" for error in errors]
+                results.append({"width": width, "height": height, "pass": not failures, "failures": failures,
+                                "components": probe.get("components", [])})
+            finally:
+                page.close()
+        browser.close()
+    record = {"url": args.url, "hierarchy": args.hierarchy, "pass": all(r["pass"] for r in results), "viewports": results}
+    (args.out / "hierarchy.json").write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    for result in results:
+        print(f"{result['width']}px: {'pass' if result['pass'] else 'FAIL'}")
+        for failure in result["failures"]:
+            print(f"  - {failure}")
+    return 0 if record["pass"] else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -25,9 +25,11 @@ for (const host of hosts) {
       ? canonical.replace(/^name: ultradesign\r?$/m, 'name: ultradesign-workflow') : canonical);
     for (const relative of [
       'prompts/01-frame.md', 'prompts/02-references.md', 'prompts/03-interview.md',
-      'prompts/04-system.md', 'prompts/05-implementation.md', 'prompts/06-visual-qa.md',
-      'prompts/07-motion.md', 'prompts/08-final.md', 'prompts/09-sharing.md',
+      'prompts/04-system.md', 'prompts/05-catalog.md', 'prompts/06-map.md', 'prompts/07-generate.md',
+      'prompts/08-visual-qa.md', 'prompts/09-motion.md', 'prompts/10-final.md', 'prompts/11-sharing.md',
       'scripts/reference-board', 'scripts/palette-board', 'scripts/design-tokens', 'scripts/design-lint',
+      'scripts/a2ui-validate', 'scripts/hierarchy-check', 'scripts/screen-map',
+      'assets/a2ui/v1_0/agent_to_renderer.json', 'assets/templates/guard/check.mjs',
       'assets/templates/interview-log.md', 'assets/templates/system-page/README.md',
     ]) assert.ok(files.has(`skills/${name}/${relative}`), `${host} bundle missing ${relative}`);
     const adapters = [...files.keys()].filter((file) => !file.startsWith(`skills/${name}/`) && !file.startsWith('adapters/omp/'));

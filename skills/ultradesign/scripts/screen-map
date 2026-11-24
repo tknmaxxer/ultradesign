@@ -1,0 +1,90 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = []
+# ///
+"""Render owner-review board for hierarchy tables: one numbered section per screen or page section.
+
+Each input is a hierarchy.json (see references/hierarchy.md). Optional keys used by the board:
+"order" (number), "title", "reference": {"url", "crop"} (crop = local image path), "visual", "motion".
+Crops are copied beside the board. The board makes no network requests.
+"""
+
+import argparse
+import html
+import json
+from pathlib import Path
+import shutil
+import sys
+
+STYLE = """
+body{margin:0;font:15px/1.5 system-ui,sans-serif;color:#1d1d1f;background:#fafafa}
+main{max-width:1200px;margin:0 auto;padding:32px 24px 64px}
+h1{font-size:22px;margin:0 0 4px}p.lead{margin:0 0 32px;color:#555}
+section{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:24px;padding:24px 0;border-top:1px solid #ddd}
+section h2{font-size:18px;margin:0 0 8px}section h2 span{color:#888;font-weight:400;margin-right:8px}
+img{width:100%;height:auto;border:1px solid #e5e5e5}
+table{width:100%;border-collapse:collapse}td,th{text-align:left;vertical-align:top;padding:6px 8px;border-bottom:1px solid #eee}
+th{font-weight:600;color:#555;font-size:13px}td.p{white-space:nowrap;font-weight:600}
+dl{margin:12px 0 0;display:grid;grid-template-columns:max-content 1fr;gap:4px 12px}dt{color:#777}dd{margin:0}
+@media (max-width:760px){section{grid-template-columns:1fr}}
+"""
+
+
+def load(path):
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise SystemExit(f"error: cannot read {path}: {error}") from None
+
+
+def section(number, table, out, source):
+    e = html.escape
+    reference = table.get("reference") or {}
+    media = ""
+    crop = reference.get("crop")
+    if crop:
+        crop_path = (Path(source).parent / crop).resolve()
+        if not crop_path.is_file():
+            raise SystemExit(f"error: missing crop {crop_path}")
+        target = out.parent / "map-assets" / f"{number:02d}{crop_path.suffix}"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(crop_path, target)
+        media = f'<img src="map-assets/{target.name}" alt="Reference crop for section {number}">'
+    if reference.get("url"):
+        media += f'<p><a href="{e(reference["url"])}">{e(reference["url"])}</a></p>'
+    rank = {1: "P1", 2: "P2", 3: "P3", "action": "Action"}
+    rows = "".join(
+        f'<tr><td class="p">{rank.get(item.get("priority"), "?")}{" · primary" if item.get("id") == table.get("primaryAction") else ""}</td>'
+        f'<td>{e(str(item.get("says", "")))}</td><td>{e(str(item.get("id", "")))}</td><td>{e(str(item.get("words", "")))}</td></tr>'
+        for item in sorted(table.get("items", []), key=lambda i: (4 if i.get("priority") == "action" else i.get("priority", 5))))
+    details = "".join(f"<dt>{e(label)}</dt><dd>{e(str(table[key]))}</dd>"
+                      for key, label in (("task", "Task"), ("frame", "Layout frame"), ("visual", "Visual"), ("motion", "Motion"))
+                      if table.get(key))
+    return (f'<section id="s{number}"><div>{media or "<p>No reference crop.</p>"}</div><div>'
+            f'<h2><span>{number}</span>{e(str(table.get("title") or table.get("screen") or ""))}</h2>'
+            f'<table><tr><th>Priority</th><th>What it says</th><th>Component ID</th><th>Max words</th></tr>{rows}</table>'
+            f'<dl>{details}</dl></div></section>')
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("tables", nargs="+", help="hierarchy.json files")
+    parser.add_argument("--out", type=Path, required=True, help="board HTML path")
+    parser.add_argument("--title", default="Hierarchy and section map")
+    args = parser.parse_args()
+    loaded = [(load(path), path) for path in args.tables]
+    loaded.sort(key=lambda pair: (pair[0].get("order", 1e9), args.tables.index(pair[1])))
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    sections = "".join(section(number, table, args.out, path) for number, (table, path) in enumerate(loaded, 1))
+    args.out.write_text(
+        f'<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+        f"<title>{html.escape(args.title)}</title><style>{STYLE}</style><main><h1>{html.escape(args.title)}</h1>"
+        '<p class="lead">Approve the map, or answer by number: "drop 4", "swap 6 and 7", "make the install path P1 in 3".</p>'
+        f"{sections}</main></html>\n", encoding="utf-8")
+    print(f"Wrote {len(loaded)} section(s) to {args.out}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

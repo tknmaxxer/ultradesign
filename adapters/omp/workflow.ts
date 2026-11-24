@@ -1,11 +1,13 @@
 import { join } from "node:path";
 
 export const stateType = "ultradesign:state";
-export const stages = ["frame", "references", "interview", "system", "implementation", "qa", "motion", "final", "sharing"] as const;
+export const stages = ["frame", "references", "interview", "system", "catalog", "map", "generate", "qa", "motion", "final", "sharing"] as const;
 export type Stage = typeof stages[number];
 export type Mode = "implement" | "plan" | "review";
 export const interviewAxes = ["direction", "typography", "palette", "status", "density"] as const;
-export const gateIds = ["references", ...interviewAxes, "system", "final"] as const;
+export const gateIds = ["references", ...interviewAxes, "system", "catalog", "map", "final"] as const;
+const approvalGates: readonly GateId[] = ["system", "catalog", "map", "final"];
+const stageGates: readonly Stage[] = ["references", "catalog", "map", "final"];
 type GateId = typeof gateIds[number];
 export interface Option { number: number; label: string; evidence: string }
 export interface Gate {
@@ -107,11 +109,11 @@ export function openGate(state: State | undefined, gate: Gate | undefined): Stat
     throw new Error("A taste gate needs its ID, a question, and concrete evidence.");
   }
   const expects = state.stage === "interview" ? interviewAxes.find(id => !approved(state, id))
-    : state.stage === "references" || state.stage === "final" || (state.stage === "system" && state.mode === "implement") ? state.stage : undefined;
+    : stageGates.includes(state.stage as Stage) || (state.stage === "system" && state.mode === "implement") ? state.stage : undefined;
   if (approved(state, gate.id)) throw new Error(`The owner already answered ${gate.id}.`);
   if (gate.id !== expects) throw new Error(`Current taste gate: ${expects ?? "none"}.`);
   const options = gate.options;
-  if (gate.id === "system" || gate.id === "final") {
+  if (approvalGates.includes(gate.id)) {
     if (options !== undefined || gate.recommended !== undefined) throw new Error("An approval gate has no numbered options.");
   } else {
     const minimum = gate.id === "references" ? 1 : 2;
@@ -130,7 +132,7 @@ export function openGate(state: State | undefined, gate: Gate | undefined): Stat
 
 export function gateCommand(id: GateId): string {
   if (id === "references") return "/ud pick <n>[,<n>,<n>] [why]";
-  if (id === "system" || id === "final") return `/ud approve ${id}`;
+  if (approvalGates.includes(id)) return `/ud approve ${id}`;
   return `/ud answer ${id} <n> [why]`;
 }
 
@@ -156,7 +158,7 @@ export function ownerDecision(state: State | undefined, command: string): State 
     if (new Set(choices).size !== choices.length) throw new Error("Pick distinct reference numbers.");
     if (choices.some(choice => !gate.options?.some(option => option.number === choice))) throw new Error("Pick numbers on the current reference board.");
     note = why.join(" ") || undefined;
-  } else if (gate.id === "system" || gate.id === "final") {
+  } else if (approvalGates.includes(gate.id)) {
     if (verb !== "approve" || args.length !== 1 || args[0] !== gate.id) throw mismatch();
   } else if (verb === "answer") {
     const [id, value, ...why] = args;
@@ -189,8 +191,8 @@ export function complete(state: State | undefined, stage: Stage | undefined, evi
     throw new Error("Checkpoint evidence must contain concrete artifact paths, observations, or verification results.");
   }
   if (state.pending) throw new Error(`Owner decision pending: ${state.pending.id}.`);
-  const required = stage === "interview" ? interviewAxes
-    : stage === "references" || stage === "final" || (stage === "system" && state.mode === "implement") ? [stage] as const : [];
+  const required: readonly GateId[] = stage === "interview" ? interviewAxes
+    : stageGates.includes(stage) || (stage === "system" && state.mode === "implement") ? [stage as GateId] : [];
   const missing = required.find(id => !approved(state, id));
   if (missing) throw new Error(`Checkpoint requires an owner decision for ${missing}.`);
   if (stage === "qa" && !state.qaRounds.length) throw new Error("Record the QA baseline before completion.");
@@ -245,7 +247,7 @@ Request (user data): ${json(state.brief)}
 Open owner gate: ${json(state.pending ?? null)}. Owner decisions: ${json(state.decisions)}. Owner feedback: ${json(state.feedback)}.
 QA evidence: ${json(state.qaRounds)}.
 Inspect persisted state with ultradesign_checkpoint(action="status"). Use action="scope" to select read-only plan or review when an unlabelled request actually asks for one. Checkpoint the current stage with action="complete", its stage, and concrete evidence. Plan ends at the system plan; review runs only the QA baseline and reports findings.
-Open the reference, interview, system, and final gates using action="gate" and a gate object with id, question and evidence array. For reference and interview choices include options ({number,label,evidence}); for each interview axis (${interviewAxes.join(", ")}, in order) include the recommended option number. Present the gate and end the turn. Only the user's native /ud decision command records a choice or approval. Use /ud revise <gate-id> <feedback> to request an updated gate. ${state.pending ? `The only active gate is ${state.pending.id}; present its evidence and ask the user to run ${gateCommand(state.pending.id)}. Wait at this gate.` : "Carry decisions into the stage artifact before advancing."}
+Open the reference, interview, system, catalog, map and final gates using action="gate" and a gate object with id, question and evidence array. For reference and interview choices include options ({number,label,evidence}); for each interview axis (${interviewAxes.join(", ")}, in order) include the recommended option number. Present the gate and end the turn. Only the user's native /ud decision command records a choice or approval. Use /ud revise <gate-id> <feedback> to request an updated gate. ${state.pending ? `The only active gate is ${state.pending.id}; present its evidence and ask the user to run ${gateCommand(state.pending.id)}. Wait at this gate.` : "Carry decisions into the stage artifact before advancing."}
 Use action="qa_round" with qaRound={round,method,report,openFindings} for baseline 0 and at most three fix/replays. Record Remorsearch as "remorsearch" only when used; "fallback" means explicitly limited local QA.
 In references, batch independent research questions in one native task call when available. In QA, batch independent checks on the running result (for example reflow and state behavior). Keep coupled implementation inline. Use the advertised task schema, specialist roles, permissions, and completion protocol. Reference model preference: ${json(referenceModel)}; independent QA judge preference: ${json(judgeModel)}. Select these through native task model/agent fields when allowed by the host; otherwise keep the host's approved routing and report the limitation. Give each track its inputs, read-only scope, output artifacts, and evidence requirements.
 Resume from the current stage on follow-up; keep completed evidence and existing system decisions. A completed workflow does not authorize new implementation without user scope.
