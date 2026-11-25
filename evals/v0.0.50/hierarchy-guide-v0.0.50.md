@@ -46,7 +46,7 @@ thing first; the table is where the order is decided.
   `motion`. Together they are the section map.
 
 Propose the table with the reasoning for P1 and the primary action. Render the
-board with the [screen-map tool](../scripts/screen-map) and let the owner
+board with the [screen-map tool](../../skills/ultradesign/scripts/screen-map) and let the owner
 approve, reorder, drop sections or change priorities by number.
 
 ```sh
