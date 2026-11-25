@@ -3,8 +3,15 @@
 Copy this directory's contents, including `.storybook/`, into the React + Vite
 app. Merge existing Storybook and Vitest configuration rather than overwriting
 it. Keep `stories/` and `generated/` outside the guard's application `sources`.
-The example component is a local selection action; adopt existing system
-components and replace its stories with the reachable states in `DESIGN.md`.
+The example component is a local selection action, not a product component.
+Replace its stories with imports of the actual app components and the reachable
+states in `DESIGN.md`; never keep a separate Storybook implementation of the UI.
+Preserve the app's story locations and merge their discovery globs into `main.ts`,
+except where stories or MDX sit inside the guard's `sources` (the guard rejects
+`.mdx` there and lints story fixtures as app code). Move only those story and MDX
+files outside `sources`, update their imports and the discovery globs, and record
+the move. Production components remain inside the guard's application sources;
+excluding story fixtures must not exclude the components they exercise.
 
 ## Install and generate
 
@@ -71,6 +78,51 @@ the device preference by default, and its reduced option forces the substitute.
 Imagery shows actual wide/narrow vector crops, explicitly labelled as a template
 study; replace these with approved assets and provenance.
 
+## Coverage contract
+
+Storybook is the component workbench throughout system, slice and build-out,
+not a gallery made after implementation. Develop a component's behavior in its
+stories, then use that same export in the application. Keep these surfaces:
+
+- Foundations: generated tokens plus real typography, containers, imagery and
+  motion specimens. Import values; document purpose and usage, not a second
+  manually maintained token or prop catalog.
+- Components: a story for each reachable state in `DESIGN.md`, using source
+  props and actual styles. Document when to use/avoid it, accessible naming,
+  focus behavior and extension points alongside its stories.
+- Patterns: at least one composition from the core task, with the same providers,
+  fonts and component exports as the app. Add page/task stories in the slice.
+  Fixtures may isolate data and network states here; they are not proof that
+  production APIs, authentication or routing work.
+
+Map requirements to stable story IDs in the contract's state matrix. Include
+long Korean/mixed-language copy, empty data, missing imagery and supported themes
+where relevant. Do not multiply every component by impossible states. Use real
+keyboard/pointer events in `play`, assert observable outcomes and recovery, and
+check focus return for overlays. Do not style a fake focus state to pass a test.
+
+At the gate, inspect the rendered stories at phone and desktop widths, enlarge
+text and inspect intermediate widths on the representative pattern. Report
+missing coverage and the source/build revision alongside render, interaction
+and a11y results. Passing the starter stories is not product-system coverage.
+
+## Visual regression
+
+After the owner approves the rendered system, use the project's visual regression
+runner against the same stories. If none exists, add focused Playwright screenshot
+tests against the static Storybook's `iframe.html?id=<actual-story-id>&viewMode=story`
+using `expect(page).toHaveScreenshot()`. Obtain IDs from the built story index;
+select the in-scope component and pattern states, not every page in the product.
+
+Keep the browser version, OS, fonts, viewport, theme, fixtures and motion preference
+fixed. Wait for fonts, images and the state under test to settle, not a sleep.
+An iframe screenshot does not prove that a `play` assertion ran; verify any
+interaction-produced state before capturing it. Interaction tests remain separate.
+Keep reference/actual/diff images on failure. Review differences against intent;
+update a baseline only after the intentional change is approved, never to erase
+a failure. A pixel match proves consistency with the baseline, not good design.
+Record unrun visual comparisons as unverified, not as a passing Storybook test.
+
 ## Agent component lookup
 
 Run the dev server and connect the agent to `http://localhost:6006/mcp` through
@@ -81,8 +133,17 @@ and stories. Use `docs-show-story` when further examples are needed and `test-ru
 after changes. The manifest is enabled for this React framework. Do not invent
 props or treat a story name as a component API.
 
+Use this lookup before each new component in system, slice and build-out. Record
+the source and story reused, or the missing behavior that needs an extension.
+If MCP is unavailable, read the component source, types, MDX and stories directly;
+the built story index helps locate the rendered examples. Do not claim an MCP
+call ran when it did not. Shared changes go through the Lead with affected
+consumers, updated stories and migration evidence; the static build and live
+MCP docs must describe the same source revision at handoff.
+
 ## Official sources
 
+- [Playwright visual comparisons and baseline review](https://playwright.dev/docs/test-snapshots)
 - [React + Vite framework and build output](https://storybook.js.org/docs/10/get-started/frameworks/react-vite)
 - [Storybook 10 requirements](https://storybook.js.org/docs/10/get-started/install)
 - [MDX and addon-docs](https://storybook.js.org/docs/10/writing-docs/mdx)

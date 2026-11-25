@@ -62,9 +62,17 @@ def main():
         for key in ("reasons", "coreRules", "tiles"):
             if not isinstance(direction.get(key), list) or not direction[key] or not all(isinstance(v, str) and v.strip() for v in direction[key]):
                 raise ValueError(f"{key} must be a nonempty list of strings")
-        if not isinstance(direction.get("motion"), dict):
-            raise ValueError("motion requires video and strip")
+        motion = direction.get("motion")
+        if not isinstance(motion, dict):
+            raise ValueError("motion requires video and strip, or excluded with the scope reason")
         e = html.escape
+        if "excluded" in motion:
+            if set(motion) != {"excluded"} or not isinstance(motion["excluded"], str) or not motion["excluded"].strip():
+                raise ValueError("motion.excluded must be the only motion key and state the scope reason")
+            sketch = f'<p>Motion stage excluded: {e(motion["excluded"])}</p>'
+        else:
+            sketch = (f'<video controls preload="metadata" src="{asset(motion.get("video"), True)}"></video>'
+                      f'<img alt="Motion frame strip" src="{asset(motion.get("strip"))}">')
         tiles = "".join(f'<img alt="Stylescape tile" src="{asset(tile)}">' for tile in direction["tiles"])
         reasons = "".join(f"<li>{e(reason)}</li>" for reason in direction["reasons"])
         rules = "".join(f"<li>{e(rule)}</li>" for rule in direction["coreRules"])
@@ -72,8 +80,7 @@ def main():
             f'<article><h2>{e(direction["name"])}</h2><h3>Reasons</h3><ul>{reasons}</ul>'
             f'<h3>Core rules</h3><ul>{rules}</ul><div class="tiles">{tiles}</div>'
             f'<h3>Representative screen</h3><img alt="Representative screen" src="{asset(direction.get("screen"))}">'
-            f'<h3>Motion sketch</h3><video controls preload="metadata" src="{asset(direction["motion"].get("video"), True)}"></video>'
-            f'<img alt="Motion frame strip" src="{asset(direction["motion"].get("strip"))}"></article>')
+            f'<h3>Motion sketch</h3>{sketch}</article>')
     if data.get("recommended") not in ids:
         raise ValueError("recommended must name one direction id")
     args.out.parent.mkdir(parents=True, exist_ok=True)

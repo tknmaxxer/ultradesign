@@ -1,9 +1,9 @@
 # 7 · Motion language
 
-Output: motion principles, storyboard, a recorded animatic, a behavioural spec; the gate `motion`. Role: Motion and 3D. Motion is a required stage, not an add-on. Needs the approved direction, `DESIGN.md` motion tokens and, when present, the spike.
+Output: motion principles, storyboard, a recorded animatic, a behavioural spec; the gate `motion`. Role: Motion and 3D. Required at full depth and when included at short depth. Needs the approved direction, `DESIGN.md` motion tokens and, when present, the spike.
 
 1. **Role of motion.** One sentence: what motion does on this site (orient, explain, reward, set mood) and the intensity and register from the brief.
-2. **Principles and tokens.** Principles from the brief and cards (one focal point, stagger by hierarchy, productive under 150 ms for what is seen dozens of times a day, exits faster than entrances). Use the `motion.*` tokens in `DESIGN.md`; add or change them through the Lead and regenerate with `design-tokens --ts`.
+2. **Principles and tokens.** Principles from the brief and cards (one focal point, stagger by hierarchy, productive under 150 ms for what is seen dozens of times a day, exits faster than entrances). Use the `motion.*` tokens in `DESIGN.md`; add or change them through the Lead and regenerate with `design-tokens --ts`. Update the same Storybook motion specimens and affected stories; show contract changes with the motion gate, not as a parallel set of values. Use one animation owner per element, with interruption and cleanup defined; do not let two engines control the same properties.
 3. **Pick 1–2 signature sequences.** Expressive motion lives only there; elsewhere motion is productive or none. List the key moments in order with trigger, element that moves, start state and end state.
 4. **Storyboard** the key moments as a frame strip.
 5. **Animatic.** Build the signature sequence in the real stack (GSAP or Motion; R3F for 3D). The page exposes `window.udAnimatic = { duration, play(): Promise<void>, settle() }`, driven by the timeline's own duration and completion. Record at desktop and phone:

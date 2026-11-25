@@ -141,6 +141,13 @@ class Scripts(unittest.TestCase):
         manifest = json.loads((board.parent / "stylescape.json").read_text())
         for asset in manifest["assets"]:
             self.assertTrue((board.parent / asset["file"]).is_file())
+        directions["directions"][1]["motion"] = {"excluded": "Short run reuses existing system motion"}
+        self.cli("stylescape-board", "--input", self.write("directions.json", directions), "--out", board)
+        self.assertIn("Motion stage excluded: Short run reuses existing system motion", board.read_text())
+        for motion in ({"excluded": " "}, {"excluded": "Reason", "video": "animation/animatic-390.mp4"}, {}):
+            directions["directions"][1]["motion"] = motion
+            self.cli("stylescape-board", "--input", self.write("directions.json", directions), "--out", board, expected=2)
+        directions["directions"][1]["motion"] = {"excluded": "Short run reuses existing system motion"}
         directions["directions"][0]["screen"] = "https://example.com/a.png"
         self.cli("stylescape-board", "--input", self.write("directions.json", directions), "--out", board, expected=2)
 

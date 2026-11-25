@@ -6,7 +6,7 @@ description: Design and build a real frontend the way a design studio works. The
 # Ultradesign
 
 <!-- omp-policy:start -->
-Prescribe, never offer menus: no lists of choices, no multiple choice, no yes/no. Work the stages in order (frame, structure, references, directions, assets, system, motion, map, slice, build-out, review, final); short depth skips only stages the brief does not need. Ask open questions one at a time, only about facts tools cannot find; run vague words down the ladder (situation, example, what would be visible). At a gate show the artifact, a one-line reason and what to look at, ask one open question, end the turn. Approval counts only as the owner's own words saying to go ahead. Never build past an open gate the work depends on. Every section has a visual role; text-only sections on expressive pages fail without an owner exception. References give principles, never layouts; run the originality check. Motion is a required stage: approved animatic, reduced-motion version.
+Prescribe, never offer menus: no lists of choices, no multiple choice, no yes/no. Work the stages in order (frame, structure, references, directions, assets, system, motion, map, slice, build-out, review, final); short depth skips only stages the brief does not need. Ask open questions one at a time, only about facts tools cannot find; run vague words down the ladder (situation, example, what would be visible). At a gate show the artifact, a one-line reason and what to look at, ask one open question, end the turn. Approval counts only as the owner's own words saying to go ahead. Never build past an open gate the work depends on. Every section has a visual role; text-only sections on expressive pages fail without an owner exception. References give principles, never layouts; run the originality check. Motion is required at full depth and when included at short depth: approved animatic, reduced-motion version.
 <!-- omp-policy:end -->
 
 ## Choose the requested outcome
@@ -21,6 +21,12 @@ The skill states the depth from the site type at frame; it does not ask.
 
 - **Full (all 12 stages):** brand, portfolio, landing, scroll story, immersive 3D.
 - **Short:** a small page or product screens on an existing system. Runs frame, structure, directions (one direction applied to the existing system), system, slice, review, final, plus any of references, assets, motion, map and build-out that the brief needs (`include`).
+
+### Applying scope downstream
+
+In short depth, an omitted optional stage does not create a hidden prerequisite. The brief records why it is unnecessary. Reuse the existing system's assets, component examples and motion behavior; record the slice's hierarchy and responsive rules with the structure/system artifacts. A separate composition-map board, new assets or animatic is required only when that stage is included. If the work reveals a need for one, stop dependent work and rescope before building it. OMP only permits depth/include changes during frame; after that, preserve the evidence and start a newly scoped run rather than rewriting completed checkpoints or fabricating approvals.
+
+Later stages run only checks applicable to the agreed page type and available artifacts. Omitted motion/map/assets do not waive keyboard, reduced-motion, responsive or real-task checks of the actual UI. Report optional checks as not applicable with the scope reason; a required check without evidence is not done.
 
 ## Stages
 
@@ -61,13 +67,27 @@ Questions and replies follow [open questions](references/questions.md): open onl
 
 `DESIGN.md` is the source of system values and the catalog the source of what a screen can contain; `decisions.md` records how decisions were made.
 
+## Script paths
+
+Run app commands from the app root. In these recipes, `scripts/<tool>` denotes the installed skill's script, not an app file: resolve the skill directory and invoke the absolute script path. Resolve artifact arguments to the private run folder or app location where they were actually written. Do not copy the skill scripts into the app or run example paths unchanged.
+
+## Supporting skills
+
+At the start of a stage, discover installed skills and read the one or two that address its actual work. Apply their guidance to the stage artifact or check, and record the skill path/revision, what it changed and the evidence in `decisions.md`. This limits optional design helpers, not skills required by the host.
+
+- Directions: use `frontend-design` for subject-specific typography, imagery and composition, grounded in the approved brief.
+- Review: use `remorsearch-ux-qa` for browser task review as described in [stage 11](prompts/11-review.md). Add `web-design-guidelines` when interface-code and accessibility review is needed; it complements, not replaces, browser evidence.
+- Other stages: choose a matching installed specialist only when the task needs it; carry over already-read guidance rather than loading unrelated skills. Do not substitute video-composition guidance for web interaction design.
+
+Keep Ultradesign's scope, approved direction and gates intact. A helper does not authorize new work, another owner interview, a different stack or skipped checks. If a relevant skill is absent, record the gap and use the stage's local guidance; do not claim the skill ran or install it without authorization.
+
 ## Roles
 
 A logical division, not one model per role; a small job runs them in sequence in one session. The Lead owns scope, gates, `brief.md`, `DESIGN.md` and shared component APIs. UX and content, UI and system, Motion and 3D, Implementation and Independent review take the stages listed in [role briefs](references/roles.md); in OMP they are subagents and the reviewer is one that did not build the page.
 
 ## Completion criteria
 
-The final gate reports each as met, not met or not done, with evidence.
+The final gate reports each as met, not met or not done, with evidence. A scope-excluded item is not applicable with its reason, never counted as a passing check.
 
 1. Users can complete the core tasks.
 2. The normal path and realistic exception paths are implemented.

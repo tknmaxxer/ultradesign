@@ -2,7 +2,7 @@
 
 Output: three directions, one recommended, on a stylescape board; the gate `directions`. Roles: UI and system, Motion and 3D. Needs the approved brief, `structure.md`, its representative screen and the deconstruction cards. Divergence stays inside the skill: you explore three, recommend one, and show the others only as "also explored".
 
-1. **Stretch three directions far apart** on type, density, composition and imagery, not on colour alone. Each applies the brief's observable requirements, genre convention and motion line, and uses the card principles; none copies a reference's layout or signature elements. Name each direction in plain words.
+1. **Stretch three directions far apart** on type, density, composition and imagery, not on colour alone. Read and apply `frontend-design` when installed, following [supporting skills](../SKILL.md#supporting-skills); record which subject-specific choices it informed. Each direction applies the brief's observable requirements, genre convention and motion line, and uses the card principles; none copies a reference's layout or signature elements. Name each direction in plain words.
 2. **Per direction, build:**
    - **Core rules** (5–8 lines): type roles, colour roles, density, composition, imagery, motion.
    - **Stylescape tiles:** generated imagery with `generate_image` (keep consistency by passing earlier tiles as input images; check text in images for spelling), a type specimen set in the real copy, a palette sourced from a palette site and rendered with `uv run --script scripts/palette-board --input palettes.json --out palettes.html`. Log every generated image in `assets.json` ([template](../assets/templates/assets.json)).
@@ -33,11 +33,11 @@ Output: three directions, one recommended, on a stylescape board; the gate `dire
    uv run --script scripts/stylescape-board --input directions.json --out board/index.html
    ```
 
-   Short depth: one direction applied to the existing system; the same checks and gate.
+   Short depth: one direction applied to the existing system; the same checks and gate. When the run excludes `motion` ([scope applicability](../SKILL.md#applying-scope-downstream)), skip the motion sketch, set `"motion": { "excluded": "<scope reason from the brief>" }` and state the reused motion behavior in the core rules. Any other missing motion field fails the board.
 5. **Gate `directions`.**
    - Artifact: the board link.
    - Reason: why the recommended direction fits the brief, one line.
-   - Look at: what you notice first on the large screen; the type and imagery; the motion sketch (play it twice); the core rules; the two "also explored" directions.
+   - Look at: what you notice first on the large screen; the type and imagery; the motion sketch (play it twice) when motion is in scope; the core rules; the two "also explored" directions.
    - Ask: "Imagine this is live and your visitor lands on it. What do they notice first, what do they feel, and where on the screen does that feeling differ from what you want?"
    - Translate the reply (ladder, restatement). Approval records the direction, its reasons and core rules; a redirection revises the recommended direction or promotes an "also explored" one.
 

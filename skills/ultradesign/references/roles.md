@@ -7,7 +7,8 @@ Roles are a logical division of the work, not one model per role. A small job ru
 - Only the Lead talks to the owner, opens gates and records decisions. A role never asks the owner anything; it returns the open question to the Lead.
 - `brief.md`, `DESIGN.md` and shared component APIs have one owner: the Lead. Roles propose changes to them in the report; they do not edit them.
 - Read the stage's artifacts first (`brief.md`, `structure.md`, deconstruction cards, the approved direction, `DESIGN.md`). Do not infer a decision that is not recorded.
-- Building roles look up an existing component before creating one: Storybook MCP `docs-list` / `docs-show` before writing UI, `test-run` after. Without Storybook MCP, read the stories and the component source.
+- Building roles follow [Storybook lookup and coverage](../assets/templates/storybook/README.md#agent-component-lookup) before creating components; stories import the same production exports as the app. Shared API changes include affected consumers and migration evidence for the Lead.
+- Apply the stage's [supporting skills](../SKILL.md#supporting-skills), one or two relevant helpers, and report the actual guidance used with its evidence. A skill name in a report is not evidence of use.
 - Use the owner's real material. No placeholder text, no invented facts; unknown facts stay marked as hypotheses.
 - Report in this shape: files written (paths), what each shows, checks run with results, unverified items, open questions for the owner. State lab numbers as lab.
 - Stay inside the assigned files. Do not commit or publish.

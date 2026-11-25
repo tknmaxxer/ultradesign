@@ -60,7 +60,7 @@ TypeScript and the Storybook catalog with `design-tokens`.
 
 ## System
 
-| Role (color, type, spacing, radius, elevation, motion) | Token and value | Use | Existing/new or justified exception |
+| Role (color, type, spacing, radius, elevation, motion) | Token reference | Use | Existing/new or justified exception |
 | --- | --- | --- | --- |
 
 - Spacing increment, scope and exceptions:
@@ -73,7 +73,11 @@ TypeScript and the Storybook catalog with `design-tokens`.
 
 **Name / responsibility / existing primitive or implementation path:**
 
-| Data or prop | Type / source / default | Content bounds or missing value | State owner |
+- When to use / when not to use:
+- Source type/API link and Storybook docs link (do not copy prop signatures):
+- Supported composition and extension points:
+
+| Data requirement | Source of data | Content bounds or missing value | State owner |
 | --- | --- | --- | --- |
 
 | Slot or region | Tokens, hierarchy and alignment | Responsive behavior |
@@ -85,6 +89,14 @@ TypeScript and the Storybook catalog with `design-tokens`.
 - Keyboard, focus and semantics:
 - Motion trigger and reduced-motion outcome:
 - Example fixture and route/story:
+
+## Shared change ownership
+
+- Lead responsible for token and component changes:
+- Affected components, patterns and routes:
+- Reuse, extend or keep product-local, with the task that requires it:
+- Migration of existing consumers and removal of obsolete uses:
+- Linked story/test evidence and owner decision:
 
 ## Verification matrix
 
