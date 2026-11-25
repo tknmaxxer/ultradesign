@@ -6,13 +6,13 @@ result still defaults to a generic dashboard. At most four prompt iterations.
 Evaluation screenshots and reference material stay in the private run directory;
 paths in this ledger are relative to `ultradesign-research/v02/` unless noted.
 
-## Starting point: v0.1
+## Starting point: v0.0.10
 
 Both dashboard arms use an indigo accent, repeated boxed KPI/chart sections
 and similar desktop hierarchy. At 390px the treatment wraps its range control
 to three lines per option, and the baseline extends right of the viewport.
 Observed in all six `ultradesign-research/eval-smoke-html/blind/dashboard/*.png`
-captures; these are historical renders, not v0.2 evaluation samples.
+captures; these are historical renders, not v0.0.20 evaluation samples.
 
 ## Pass criteria
 
@@ -30,7 +30,7 @@ had the demo's shared content edges and light frame. The adapted route discarded
 that surface for a dark sidebar, indigo controls and trend, four filled KPI
 tiles, and boxed trend and breakdown. At 768px the equal-weight KPI grid still
 dominated the first scan. At 390px the four KPI boxes pushed the trend down.
-The treatment is still recognizably the v0.1 dashboard pattern.
+The treatment is still recognizably the v0.0.10 dashboard pattern.
 One adaptation worth retaining: at 390px the invoice row puts amount and status
 on the right and preserves the searchable identity and date on the left.
 Unlike the recreation, it exposes all five fields at once.

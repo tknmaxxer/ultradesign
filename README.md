@@ -1,4 +1,4 @@
-# Ultradesign v0.6
+# Ultradesign v0.0.60
 
 [한국어](#한국어) · [English](#english)
 
@@ -43,7 +43,7 @@ OMP·Claude Code·Antigravity·OpenCode·Cursor·Gemini CLI에서는 `/ud` 또�
 
 ![Cataly 레인 상태 화면: 상태 기호, 검색과 선택 행, 마지막 보고 패널](assets/readme/exp2-lanes.png)
 
-v0.5 시스템 화면의 색·글자 견본과 승인된 Cataly Ops 화면 예시입니다. 원본 연구 렌더에서 필요한 영역을 잘라 내고 개인 보고 내용을 가렸습니다.
+v0.0.50 시스템 화면의 색·글자 견본과 승인된 Cataly Ops 화면 예시입니다. 원본 연구 렌더에서 필요한 영역을 잘라 내고 개인 보고 내용을 가렸습니다.
 
 ### OMP에서 결정 기록하기
 
@@ -58,7 +58,7 @@ v0.5 시스템 화면의 색·글자 견본과 승인된 Cataly Ops 화면 예�
 /ud off
 ```
 
-`/ud approve <gate-id> [말]`, `/ud revise <gate-id> <피드백>`, `/ud real-user <메모>`(증거 장부의 실제 사용자 칸을 채우는 유일한 방법), `/ud resume`, `/ud status`, `/ud off`를 씁니다. 게이트 ID는 `frame`, `structure`, `references`, `directions`, `assets`, `system`, `motion`, `map`, `slice`, `buildout`, `final`입니다. 다른 하네스는 `progress.md`와 `decisions.md`에서 같은 순서를 따릅니다. v0.5 이전 세션은 저장된 근거를 보존하고 새 `/ud` 작업으로 시작합니다. 결정과 실패 기록은 [docs/lessons.md](docs/lessons.md)에 있습니다.
+`/ud approve <gate-id> [말]`, `/ud revise <gate-id> <피드백>`, `/ud real-user <메모>`(증거 장부의 실제 사용자 칸을 채우는 유일한 방법), `/ud resume`, `/ud status`, `/ud off`를 씁니다. 게이트 ID는 `frame`, `structure`, `references`, `directions`, `assets`, `system`, `motion`, `map`, `slice`, `buildout`, `final`입니다. 다른 하네스는 `progress.md`와 `decisions.md`에서 같은 순서를 따릅니다. v0.0.50 이전 세션은 저장된 근거를 보존하고 새 `/ud` 작업으로 시작합니다. 결정과 실패 기록은 [docs/lessons.md](docs/lessons.md)에 있습니다.
 
 ## English
 
@@ -97,7 +97,7 @@ See the [system and approved screen examples](#진행-순서) above.
 
 ### OMP checkpoints
 
-At a gate the agent shows the artifact, one line on why it fits your brief, what to look at, and one open question. Reply in your own words; the extension records your reply. Use `/ud approve <gate> [words]`, `/ud revise <gate> <feedback>`, `/ud real-user <note>`, `/ud resume`, `/ud status` and `/ud off`. Gates: `frame`, `structure`, `references`, `directions`, `assets`, `system`, `motion`, `map`, `slice`, `buildout`, `final`. Start a new workflow when upgrading earlier sessions; legacy progress does not count as v0.6 approval. Decisions and failures behind v0.6: [docs/lessons.md](docs/lessons.md).
+At a gate the agent shows the artifact, one line on why it fits your brief, what to look at, and one open question. Reply in your own words; the extension records your reply. Use `/ud approve <gate> [words]`, `/ud revise <gate> <feedback>`, `/ud real-user <note>`, `/ud resume`, `/ud status` and `/ud off`. Gates: `frame`, `structure`, `references`, `directions`, `assets`, `system`, `motion`, `map`, `slice`, `buildout`, `final`. Start a new workflow when upgrading earlier sessions; legacy progress does not count as v0.0.60 approval. Decisions and failures behind v0.0.60: [docs/lessons.md](docs/lessons.md).
 
 OMP keeps stage-routing settings: `ULTRADESIGN_MODEL` and `ULTRADESIGN_THINKING_LEVEL` set common defaults. `ULTRADESIGN_MODELS='{"review":{"model":"provider/judge","thinkingLevel":"high"}}'` overrides by stage (`frame`, `structure`, `references`, `directions`, `assets`, `system`, `motion`, `map`, `slice`, `buildout`, `review`, `final`, `sharing`). Default build routing is Sol 6.2 high; review uses Opus 4.6 high. Use models available to your harness.
 
@@ -122,7 +122,7 @@ scripts/scene-qa --url http://127.0.0.1:5173/ --profile desktop-1440 --out qa/sc
 
 The [build guard](skills/ultradesign/assets/templates/guard/README.md) is a template the agent installs in the renderer project as `prebuild`; `motionEntries` and `sceneEntries` let motion and scene files use GSAP, Motion and Three.js. The [Storybook template](skills/ultradesign/assets/templates/storybook/README.md) is the system gate. `animatic` and `scene-qa` need Playwright Chromium; `animatic` also needs `ffmpeg`. Frame rates from headless or SwiftShader runs are lab numbers, not device numbers.
 
-With permission to use the owner's Chrome, add `--cdp http://127.0.0.1:9222` and repeat `--candidate URL "What to compare"` for eligible first-party pages. The tool opens fresh read-only tabs and records access gaps. Manual-only sources stay browse links. With no CDP connection the public adapters work independently. Keep the board, sourced captures and run artifacts private. Install `uv` and Playwright Chromium for rendering, and use the upstream Google Labs CLI for lint. Details: [workflow](skills/ultradesign/SKILL.md) · [open questions](skills/ultradesign/references/questions.md) · [role briefs](skills/ultradesign/references/roles.md) · [source catalog](skills/ultradesign/references/catalog.md) · [A2UI catalog guide](skills/ultradesign/references/a2ui.md) · [hierarchy and composition map](skills/ultradesign/references/hierarchy.md) · [method notes](references/method-trace.md) · [v0.6 plan](docs/v06-plan.md).
+With permission to use the owner's Chrome, add `--cdp http://127.0.0.1:9222` and repeat `--candidate URL "What to compare"` for eligible first-party pages. The tool opens fresh read-only tabs and records access gaps. Manual-only sources stay browse links. With no CDP connection the public adapters work independently. Keep the board, sourced captures and run artifacts private. Install `uv` and Playwright Chromium for rendering, and use the upstream Google Labs CLI for lint. Details: [workflow](skills/ultradesign/SKILL.md) · [open questions](skills/ultradesign/references/questions.md) · [role briefs](skills/ultradesign/references/roles.md) · [source catalog](skills/ultradesign/references/catalog.md) · [A2UI catalog guide](skills/ultradesign/references/a2ui.md) · [hierarchy and composition map](skills/ultradesign/references/hierarchy.md) · [method notes](references/method-trace.md) · [v0.0.60 plan](docs/v0.0.60-plan.md).
 
 소유자가 명시적으로 허용한 실제 제품 화면은 `--target-url URL`로 추가합니다. 비교 후보와 분리해서 캡처하며, 해당 URL에만 `robots.txt` 검사 예외를 적용합니다. 제3자 출처의 정책과 브라우저 접근 제한은 유지합니다.
 
@@ -136,8 +136,8 @@ bun run test:host
 node tests/visual-qa-smoke.mjs
 uv run --script tests/a2ui-tools-smoke.py
 skills-ref validate skills/ultradesign
-node scripts/adapters.mjs generate all --out dist/v0.6.0
+node scripts/adapters.mjs generate all --out dist/v0.0.60
 git diff --check
 ```
 
-Generated adapters are local bundles, not published packages. The [historical one-shot evals](evals/README.md) are retained for v0.1–v0.3 provenance; they do not measure v0.4 or later. The [v0.5 hierarchy eval](evals/v05/README.md) compares generation with and without the hierarchy layer.
+Generated adapters are local bundles, not published packages. The [historical one-shot evals](evals/README.md) are retained for v0.0.10–v0.0.30 provenance; they do not measure v0.0.40 or later. The [v0.0.50 hierarchy eval](evals/v0.0.50/README.md) compares generation with and without the hierarchy layer.

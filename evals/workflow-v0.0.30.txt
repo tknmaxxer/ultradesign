@@ -1,4 +1,4 @@
-<!-- Historical v0.3 inline evaluator input from 6790ca1; not used by v0.4. -->
+<!-- Historical v0.0.30 inline evaluator input from 6790ca1; not used by v0.0.40. -->
 
 ---
 name: ultradesign

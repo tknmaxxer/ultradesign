@@ -386,8 +386,8 @@ async function runBuilder(root, options, task, treatment, evidence) {
   if (task.seed) await writeFile(join(session.cwd, "index.html"), task.seed);
   const args = ompArgs(model, treatment, false, thinking, output);
   if (treatment && output === "html") {
-    // Retain the testable legacy protocol without importing v0.4's gated workflow.
-    const guidance = await readFile(new URL("./workflow-v03.txt", import.meta.url), "utf8");
+    // Retain the testable legacy protocol without importing v0.0.40's gated workflow.
+    const guidance = await readFile(new URL("./workflow-v0.0.30.txt", import.meta.url), "utf8");
     args.push("--append-system-prompt", `Use this copy of the historical workflow for the tool-free HTML delivery. Work through relevant stages in reasoning; the runner handles files and rendered QA. Finish with the HTML document, without file tools or checkpoints.\n\n${guidance}`);
   }
   const client = new RpcClient(options.omp, args, { ...session, timeout: options.timeout });
@@ -606,7 +606,7 @@ export async function run(options) {
   }
 }
 
-const help = `Historical v0.1–v0.3 evaluation. For the runnable workflow use checkout 6790ca1.
+const help = `Historical v0.0.10–v0.0.30 evaluation. For the runnable workflow use checkout 6790ca1.
 Usage: node evals/run.mjs --builder-model provider/model --judge-model provider/model --out NEW_DIR
   --task dashboard|landing|settings|mobile|all  (default: all)
   --builder-thinking LEVEL  Identical effort for both builders (default: high)
@@ -646,7 +646,7 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
     const options = parseArgs(process.argv.slice(2));
     if (options.help) console.log(help);
     else {
-      console.error("Historical evaluation only. Run the v0.1–v0.3 comparison from checkout 6790ca1; v0.4 requires human gates.");
+      console.error("Historical evaluation only. Run the v0.0.10–v0.0.30 comparison from checkout 6790ca1; v0.0.40 requires human gates.");
       process.exitCode = 1;
     }
   } catch (error) {

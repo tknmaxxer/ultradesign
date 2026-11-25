@@ -283,7 +283,7 @@ test("historical HTML delivery provides the complete frozen workflow only to /ud
     assert.match(baseline.prompt, /exactly one complete, self-contained HTML/);
     assert.ok(!baseline.args.includes("--append-system-prompt"));
     const guidance = treatment.args[treatment.args.indexOf("--append-system-prompt") + 1];
-    const frozen = await readFile(new URL("../evals/workflow-v03.txt", import.meta.url), "utf8");
+    const frozen = await readFile(new URL("../evals/workflow-v0.0.30.txt", import.meta.url), "utf8");
     assert.ok(guidance.endsWith(frozen));
     assert.match(guidance, /# 1 · Collect, reconstruct, adapt/);
     assert.match(guidance, /# 5 · Verify the real design/);

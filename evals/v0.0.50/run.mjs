@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// v0.5 hierarchy evaluation: the same brief and catalog, generated twice.
-//   before = the v0.4 A2UI flow: brief + catalog, validator repair loop, render.
-//   after  = v0.5: owner-gated hierarchy table, generation against it, validator with --hierarchy,
+// v0.0.50 hierarchy evaluation: the same brief and catalog, generated twice.
+//   before = the v0.0.40 A2UI flow: brief + catalog, validator repair loop, render.
+//   after  = v0.0.50: owner-gated hierarchy table, generation against it, validator with --hierarchy,
 //            render, hierarchy-check, and repair from its findings.
 // Phase "map" drafts the hierarchy tables and stops at the gate. A person reviews/edits them and
 // passes the approved directory to phase "generate". Nothing is auto-approved.
@@ -14,7 +14,7 @@ import { generatorSystem, tasks } from "./tasks.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const skill = join(repo, "skills/ultradesign");
-const usage = `Usage: node evals/v05/run.mjs --renderer DIR --url http://127.0.0.1:PORT --out NEW_DIR
+const usage = `Usage: node evals/v0.0.50/run.mjs --renderer DIR --url http://127.0.0.1:PORT --out NEW_DIR
   --phase map|generate  map drafts hierarchy tables for review; generate needs --approved DIR (default: map)
   --approved DIR        reviewed hierarchy tables named <task>.json
   --task ID[,ID]        night_oncall, landing_install (default: both)
@@ -136,8 +136,8 @@ async function before(options, task, dir, catalog, catalogFile) {
 async function after(options, task, dir, catalog, catalogFile) {
   const tableFile = resolve(options.approved, `${task.id}.json`);
   const table = JSON.parse(await readFile(tableFile, "utf8"));
-  // The v0.5 generate stage, frozen so this eval keeps measuring v0.5 after the v0.6 rewrite.
-  const guide = await readFile(join(repo, "evals/v05/generate-prompt-v05.md"), "utf8");
+  // The v0.0.50 generate stage, frozen so this eval keeps measuring v0.0.50 after the v0.0.60 rewrite.
+  const guide = await readFile(join(repo, "evals/v0.0.50/generate-prompt-v0.0.50.md"), "utf8");
   const prompt = `${fence("catalog", catalog)}${fence("brief", task.brief)}${fence("approved_hierarchy", table)}${fence("stage_instructions", guide)}`
     + `\nUse surfaceId "${task.surfaceId}". Return only the A2UI createSurface message.`;
   let generated = await generateValid(options, dir, "generate", task, catalogFile, prompt, tableFile);
@@ -161,7 +161,7 @@ async function main() {
   options.out = resolve(options.out);
   if (existsSync(options.out)) throw new Error("--out must not exist.");
   await mkdir(options.out, { recursive: true });
-  const guide = await readFile(join(repo, "evals/v05/hierarchy-guide-v05.md"), "utf8");
+  const guide = await readFile(join(repo, "evals/v0.0.50/hierarchy-guide-v0.0.50.md"), "utf8");
   const results = { model: options.model, thinking: options.thinking, phase: options.phase, tasks: {} };
   for (const task of options.selected) {
     const catalogFile = join(options.renderer, task.catalog);

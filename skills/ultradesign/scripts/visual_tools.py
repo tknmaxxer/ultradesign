@@ -1,4 +1,4 @@
-"""Shared capture boundary for the v0.6 visual tools (not a CLI)."""
+"""Shared capture boundary for the v0.0.60 visual tools (not a CLI)."""
 
 import argparse
 import json

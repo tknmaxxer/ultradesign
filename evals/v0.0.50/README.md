@@ -1,4 +1,4 @@
-# v0.5 hierarchy evaluation
+# v0.0.50 hierarchy evaluation
 
 Does the hierarchy layer change what a model generates from the same brief
 and catalog? Two fixed tasks: the night on-call handoff screen (the screen the
@@ -7,15 +7,15 @@ section (the R3 section that read as empty boxes).
 
 | Condition | What the generator gets | Checks |
 | --- | --- | --- |
-| before | Brief + catalog (the v0.4 A2UI flow) | `a2ui-validate` repair loop; render; `hierarchy-check` without a table (one P1, P1 dominant, one primary action in view) |
+| before | Brief + catalog (the v0.0.40 A2UI flow) | `a2ui-validate` repair loop; render; `hierarchy-check` without a table (one P1, P1 dominant, one primary action in view) |
 | after | Brief + catalog + approved `hierarchy.json` + the generate stage | `a2ui-validate --hierarchy` repair loop; render; `hierarchy-check --hierarchy`; repair from its findings |
 
 Both use the same model, thinking level and repair budget, through the local
 `omp` CLI with tools, skills, rules and context files off. The "generate
-stage" is [generate-prompt-v05.md](generate-prompt-v05.md), the v0.5
-`prompts/07-generate.md` frozen at commit `6f7611c`; v0.6 replaced that stage.
-Table drafting uses [hierarchy-guide-v05.md](hierarchy-guide-v05.md), the
-v0.5 hierarchy guide frozen at the same commit.
+stage" is [generate-prompt-v0.0.50.md](generate-prompt-v0.0.50.md), the v0.0.50
+`prompts/07-generate.md` frozen at commit `6f7611c`; v0.0.60 replaced that stage.
+Table drafting uses [hierarchy-guide-v0.0.50.md](hierarchy-guide-v0.0.50.md), the
+v0.0.50 hierarchy guide frozen at the same commit.
 
 ## Run
 
@@ -26,11 +26,11 @@ in [the catalog guide](../../skills/ultradesign/references/a2ui.md), and has
 
 ```sh
 # 1. Draft the tables, then stop at the gate.
-node evals/v05/run.mjs --renderer ../app --url http://127.0.0.1:4391 --out out/map
+node evals/v0.0.50/run.mjs --renderer ../app --url http://127.0.0.1:4391 --out out/map
 # 2. A person reviews out/map/<task>/hierarchy.json, edits if needed, and copies the approved
 #    tables to approved/<task>.json. Record who approved them.
 # 3. Generate both conditions.
-node evals/v05/run.mjs --phase generate --approved approved --renderer ../app \
+node evals/v0.0.50/run.mjs --phase generate --approved approved --renderer ../app \
   --url http://127.0.0.1:4391 --out out/run
 ```
 

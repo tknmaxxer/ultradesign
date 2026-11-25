@@ -2,9 +2,9 @@
 # requires-python = ">=3.10"
 # dependencies = []
 # ///
-"""Local deterministic v0.6 visual-tool regressions.
+"""Local deterministic v0.0.60 visual-tool regressions.
 
-Run: uv run --script tests/v06-scripts-smoke.py
+Run: uv run --script tests/v0.0.60-scripts-smoke.py
 Requires uv, Playwright Chromium and ffmpeg. No remote fixture dependencies.
 """
 
@@ -40,7 +40,7 @@ window.udAnimatic={duration:.3,play(){return new Promise(resolve=>{
 
 class Scripts(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="ud-v06-")
+        self.temp = tempfile.TemporaryDirectory(prefix="ud-v0.0.60-")
         self.root = Path(self.temp.name)
 
     def tearDown(self):

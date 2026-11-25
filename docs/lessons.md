@@ -1,4 +1,4 @@
-# Ultradesign lessons (v0.1 → v0.6)
+# Ultradesign lessons (v0.0.10 → v0.0.60)
 
 What the experiments from 2026-11-21 to 2026-11-25 established. Evidence lives
 outside this repo, in the private research folder next to it; paths below are
@@ -9,7 +9,7 @@ Owner quotes are verbatim from the Ultradesign Discord thread.
 
 | Decision | Why | Evidence |
 | --- | --- | --- |
-| Every taste choice is a human gate: references, each interview axis, `/system`, catalog, hierarchy/section map, final screen. | Model-picked references, palettes and statuses came out generic. v0.3 `/ud` scored 20/25, the same as the plain brief, on both tasks. Owner on v0.1/v0.2: "솔직히 둘 다 별로야." Screens improved once the owner picked. | `v03/report.md`, `exp1/report.md`, `ds/interview.md` |
+| Every taste choice is a human gate: references, each interview axis, `/system`, catalog, hierarchy/section map, final screen. | Model-picked references, palettes and statuses came out generic. v0.0.30 `/ud` scored 20/25, the same as the plain brief, on both tasks. Owner on v0.0.10/v0.0.20: "솔직히 둘 다 별로야." Screens improved once the owner picked. | `v03/report.md`, `exp1/report.md`, `ds/interview.md` |
 | References are real shipped sites and galleries, gathered on a numbered board; the owner picks 1–3. | "Mobbin 말고도 레퍼런스 찾는 곳 여러군데 언급했잖아." The picked ref 35 and Raycast set the hero and page structure. | `refs/report2.md`, `v04/cataly/decisions.md` |
 | Palettes come from palette sites, not invented. | Warm stone + red was rejected: "너무 클로드 느낌나는 색조합이야… 색조합 하는 사이트에서 레퍼런스 얻어서 해". Color Hunt #6 was picked from a board. | `ds/report-v2.md`, `ds/palettes/` |
 | `DESIGN.md` in the Google Labs design.md format is the single source; `tokens.css` and the catalog are generated. | The owner asked whether the system was really designed ("디자인 시스템이 제대로 짜진게 맞는가") after SEED tokens were pasted without decisions. | `ds/interview.md`, `ds/DESIGN.md` |
@@ -21,9 +21,9 @@ Owner quotes are verbatim from the Ultradesign Discord thread.
 
 ## Failures and what each one taught
 
-| Round | What happened | Lesson encoded in v0.5 |
+| Round | What happened | Lesson encoded in v0.0.50 |
 | --- | --- | --- |
-| v0.1–v0.3 one-shot A/B | Same score as the plain brief; generic SaaS layout (left nav, four KPI cards, charts, table). | Remove the model from taste decisions; evaluate with real screens and owner picks. |
+| v0.0.10–v0.0.30 one-shot A/B | Same score as the plain brief; generic SaaS layout (left nav, four KPI cards, charts, table). | Remove the model from taste decisions; evaluate with real screens and owner picks. |
 | exp1 (SEED pasted, two arms) | "그나마 a? 인데 UX적으로 문제가 있는듯." Pasted tokens without product decisions. | Interview → `DESIGN.md` before any screen; Remorsearch UX QA loop. |
 | Cataly R2 | "너무 텍스트가 많아… 더 AI스러워졌어… 디자인 시스템 전혀 반영이 안되어 있는 거 같은데". Cause: a 360-line stylesheet with hardcoded hex colors, bold sans display headlines outside the DS fonts, copy inflated to fill page length. | A guard that fails the build on hex/rgb literals, raw px font sizes, non-token fonts and components from outside the system; copy budgets per item. |
 | Cataly R3 | Built exactly to the approved map, guard passed. The lead's own review (no owner verdict): too empty, wireframe-like — icon-plus-two-words boxes, the same centered title → big box rhythm in every section. | Each section's layout frame comes from an approved screen or reference; a component that renders an empty box is a catalog defect. A hierarchy table states what each region must say. |
@@ -37,9 +37,9 @@ Owner quotes are verbatim from the Ultradesign Discord thread.
 - Remorsearch baseline → scoped fixes → same-scenario replay. Every round found real issues (focus loss, offscreen result, small targets).
 - A board on the Tailscale share for every gate.
 
-## What the v0.5 eval exposed (fixed)
+## What the v0.0.50 eval exposed (fixed)
 
-Wiring the eval renderer and its first round (`evals/v05`, night on-call +
+Wiring the eval renderer and its first round (`evals/v0.0.50`, night on-call +
 landing "Get started", before/after) surfaced four problems the validator did
 not catch at the time:
 
@@ -55,7 +55,7 @@ not catch at the time:
 - Schema errors cascaded (`unevaluatedProperties` listed every valid prop
   once one branch failed). The validator now names unknown props directly.
 
-## v0.5 workflow in one line
+## v0.0.50 workflow in one line
 
 Frame → reference board (pick) → interview (answer ×5) → `DESIGN.md` + `/system`
 (approve) → A2UI catalog with layout frames from approved screens (approve) →
@@ -76,15 +76,15 @@ guard + hierarchy check → UX QA → final (approve); motion on request.
   how many frames a catalog needs before pages stop looking alike is untested.
 - The guard is a template the agent installs into the renderer project; it
   covers CSS Modules and JS/TS, not other styling systems.
-- The 7 uncommitted v0.3 eval-runner files on `feat/workflow-v0` (catalog
-  capture types, `variants.html`) predate v0.4 and are still uncommitted; they
-  belong to the historical A/B runner, not to v0.5.
+- The 7 uncommitted v0.0.30 eval-runner files on `feat/workflow-v0` (catalog
+  capture types, `variants.html`) predate v0.0.40 and are still uncommitted; they
+  belong to the historical A/B runner, not to v0.0.50.
 
-## v0.6: what changed and why
+## v0.0.60: what changed and why
 
-The owner's direction of 2026-11-24/25 (Discord #일반) replaced the v0.5 order: references stay references, motion and the design-system contract are required stages, text-only output is a defect to measure, and the skill prescribes instead of offering choices. The plan is `docs/v06-plan.md`; the stage-by-stage recipes are in `skills/ultradesign/prompts/`. Owner quotes: "각 단계에 선택지를 제공하지 말고 이런이런식으로 하세요를 제공하도록 하자" and "뭔가를 물을 때 단답으로 객관식이 아니라 주관식의 답을 유도하고 주관식의 답을 얻어야 해."
+The owner's direction of 2026-11-24/25 (Discord #일반) replaced the v0.0.50 order: references stay references, motion and the design-system contract are required stages, text-only output is a defect to measure, and the skill prescribes instead of offering choices. The plan is `docs/v0.0.60-plan.md`; the stage-by-stage recipes are in `skills/ultradesign/prompts/`. Owner quotes: "각 단계에 선택지를 제공하지 말고 이런이런식으로 하세요를 제공하도록 하자" and "뭔가를 물을 때 단답으로 객관식이 아니라 주관식의 답을 유도하고 주관식의 답을 얻어야 해."
 
-| v0.5 | v0.6 | Why |
+| v0.0.50 | v0.0.60 | Why |
 | --- | --- | --- |
 | Reference picks carried layouts into frames and the map. | Picks become deconstruction cards (principles and a "not carried" line); frames come from the chosen direction. | Transplanting a reference's layout is copying. |
 | Five-axis numbered interview, numbered picks. | At most three open questions at frame, then a recommended direction the owner approves or redirects; vague words go down a three-step ladder; raw answer and extraction are logged side by side. | Users are not designers; short multiple-choice answers carried no specifics. |
@@ -105,7 +105,7 @@ The manual dry run on the owner's own site (a Korean corporate homepage for a on
 
 Raw owner answers and their extractions side by side (the pattern in `assets/templates/decisions.md`) made it easy to see which requirement came from which words; "일 잘하더라" decomposed into four visible behaviours through one ladder step.
 
-### Open after v0.6
+### Open after v0.0.60
 
 - Gate count and wall time for a full 12-stage run are unmeasured; the dry run covered stages 1–4 only.
 - The second dry run on the owner's site, with the rewritten skill, gate by gate on the share, is the next check.

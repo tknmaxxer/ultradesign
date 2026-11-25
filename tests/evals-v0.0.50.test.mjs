@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseArgs } from "../evals/v05/run.mjs";
+import { parseArgs } from "../evals/v0.0.50/run.mjs";
 
 const base = ["--renderer", "app", "--url", "http://127.0.0.1:4391", "--out", "results"];
 
-test("v0.5 eval stops at the hierarchy gate unless approved tables are supplied", () => {
+test("v0.0.50 eval stops at the hierarchy gate unless approved tables are supplied", () => {
   assert.equal(parseArgs(base).phase, "map");
   assert.deepEqual(parseArgs(base).selected.map(task => task.id), ["night_oncall", "landing_install"]);
   assert.throws(() => parseArgs([...base, "--phase", "generate"]), /--approved/);

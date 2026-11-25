@@ -1,4 +1,4 @@
-// Fixed briefs for the v0.5 hierarchy evaluation. Both conditions receive the same brief and catalog.
+// Fixed briefs for the v0.0.50 hierarchy evaluation. Both conditions receive the same brief and catalog.
 export const tasks = [
   {
     id: "night_oncall",
