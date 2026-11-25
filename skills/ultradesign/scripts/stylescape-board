@@ -1,0 +1,103 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = []
+# ///
+"""Build a self-contained offline stylescape board from local direction assets.
+
+Input: --input JSON: {"recommended":"id","directions":[{"id","name",
+"reasons":["..."],"coreRules":["..."],"tiles":["local.png"],
+"screen":"local.png","motion":{"video":"local.mp4","strip":"local.png"}}]}.
+Paths resolve beside input. Raster images (PNG/JPEG/WebP/GIF/AVIF) and
+MP4/WebM video only; remote URLs, HTML and SVG are rejected to keep it offline.
+Output: --out HTML, adjacent board-assets copies and stylescape.json manifest.
+Method: one large recommendation, remaining directions under Also explored.
+Limits: validates structure and file existence/extensions, not media decoding,
+quality, provenance or whether the directions share the same content.
+Exit: 0 generated, 2 invalid input/load error (no scored checks, no exit 1).
+"""
+
+import argparse
+import hashlib
+import html
+import json
+from pathlib import Path
+import shutil
+from urllib.parse import urlsplit
+from visual_tools import run
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--input", type=Path, required=True)
+    p.add_argument("--out", type=Path, required=True)
+    args = p.parse_args()
+    data = json.loads(args.input.read_text(encoding="utf-8"))
+    directions = data.get("directions")
+    if not isinstance(directions, list) or len(directions) < 2:
+        raise ValueError("directions must contain at least two entries")
+    ids, assets = set(), {}
+
+    def asset(value, video=False):
+        allowed = {".mp4", ".webm"} if video else {".png", ".jpg", ".jpeg", ".webp", ".gif", ".avif"}
+        if not isinstance(value, str) or urlsplit(value).scheme or urlsplit(value).netloc:
+            raise ValueError("assets must be local paths")
+        path = (args.input.parent / value).resolve()
+        if path.suffix.lower() not in allowed or not path.is_file():
+            raise ValueError(f"missing or unsupported local asset: {value}")
+        name = hashlib.sha256(path.read_bytes()).hexdigest()[:20] + path.suffix.lower()
+        assets[path] = name
+        return f"board-assets/{name}"
+
+    rendered = {}
+    for direction in directions:
+        if not isinstance(direction, dict):
+            raise ValueError("each direction must be an object")
+        for key in ("id", "name"):
+            if not isinstance(direction.get(key), str) or not direction[key].strip():
+                raise ValueError(f"direction requires {key}")
+        if direction["id"] in ids:
+            raise ValueError("direction ids must be unique")
+        ids.add(direction["id"])
+        for key in ("reasons", "coreRules", "tiles"):
+            if not isinstance(direction.get(key), list) or not direction[key] or not all(isinstance(v, str) and v.strip() for v in direction[key]):
+                raise ValueError(f"{key} must be a nonempty list of strings")
+        if not isinstance(direction.get("motion"), dict):
+            raise ValueError("motion requires video and strip")
+        e = html.escape
+        tiles = "".join(f'<img alt="Stylescape tile" src="{asset(tile)}">' for tile in direction["tiles"])
+        reasons = "".join(f"<li>{e(reason)}</li>" for reason in direction["reasons"])
+        rules = "".join(f"<li>{e(rule)}</li>" for rule in direction["coreRules"])
+        rendered[direction["id"]] = (
+            f'<article><h2>{e(direction["name"])}</h2><h3>Reasons</h3><ul>{reasons}</ul>'
+            f'<h3>Core rules</h3><ul>{rules}</ul><div class="tiles">{tiles}</div>'
+            f'<h3>Representative screen</h3><img alt="Representative screen" src="{asset(direction.get("screen"))}">'
+            f'<h3>Motion sketch</h3><video controls preload="metadata" src="{asset(direction["motion"].get("video"), True)}"></video>'
+            f'<img alt="Motion frame strip" src="{asset(direction["motion"].get("strip"))}"></article>')
+    if data.get("recommended") not in ids:
+        raise ValueError("recommended must name one direction id")
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    folder = args.out.parent / "board-assets"
+    folder.mkdir(exist_ok=True)
+    for source, name in assets.items():
+        if source != (folder / name).resolve():
+            shutil.copyfile(source, folder / name)
+    others = "".join(rendered[key] for key in rendered if key != data["recommended"])
+    args.out.write_text(
+        '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
+        '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src \'self\'; media-src \'self\'; style-src \'unsafe-inline\'">'
+        '<title>Direction board</title><style>body{margin:0;background:#f5f3ef;color:#222;font:16px/1.5 system-ui}'
+        'main{max-width:1200px;margin:auto;padding:32px}article{padding:24px;background:white;margin-bottom:24px}'
+        'img,video{max-width:100%;display:block}.tiles,.explored{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}'
+        'h1{font-size:40px}@media(max-width:700px){.tiles,.explored{grid-template-columns:1fr}main{padding:16px}}</style>'
+        f'<main><h1>Recommended direction</h1>{rendered[data["recommended"]]}'
+        f'<h2>Also explored</h2><div class="explored">{others}</div></main></html>\n', encoding="utf-8")
+    manifest = {"recommended": data["recommended"], "directions": list(rendered),
+                "assets": [{"source": str(source), "file": f"board-assets/{name}"} for source, name in assets.items()]}
+    (args.out.parent / "stylescape.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    print(f"Wrote {args.out}")
+    return 0
+
+
+if __name__ == "__main__":
+    run(main)

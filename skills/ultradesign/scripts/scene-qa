@@ -1,0 +1,92 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["playwright==1.65.1"]
+# ///
+"""Capture scene evidence in Chromium with SwiftShader (LAB, not device FPS).
+
+Input: --url, --out, --profile desktop-1440|phone-390, --seconds (5).
+Output: scene-qa.json, scene.png, reduced.png and fallback.png.
+Method: rAF timestamps over the requested interval, buffered LCP observation,
+existing canvas WebGL contexts, console/page errors; separate reduced-motion
+and --disable-webgl browser replays. If udAnimatic exists, replay its promise
+and settle before stills. --ready handles other asynchronous scene readiness.
+Limits: rAF is scheduling throughput, not GPU frame timing; LCP is a single
+lab sample, not field p75. Fallback appearance requires owner inspection.
+No device emulation claim; phone profile is a CSS viewport. Same-origin only.
+Exit: 0 no errors and WebGL available, 1 errors or unavailable WebGL,
+2 usage/load error. A page without a WebGL scene may still be measured.
+"""
+
+from visual_tools import (FLAGS, animatic_ready, bounded, context, load, parser,
+                          positive, report, run, webgl)
+
+LCP = """window.__udLCP = null;
+new PerformanceObserver(list => {
+    for (const entry of list.getEntries()) window.__udLCP = entry.startTime;
+}).observe({type:'largest-contentful-paint', buffered:true});"""
+
+
+def replay(page, timeout):
+    if page.evaluate("!!window.udAnimatic"):
+        duration = animatic_ready(page, timeout)
+        bounded(page, "() => udAnimatic.play()", max(timeout, (duration + 5) * 1000))
+        bounded(page, "() => udAnimatic.settle()", timeout)
+
+
+def main():
+    p = parser(__doc__)
+    p.add_argument("--profile", choices=["desktop-1440", "phone-390"], default="desktop-1440")
+    p.add_argument("--seconds", type=positive, default=5)
+    args = p.parse_args()
+    width = 390 if args.profile == "phone-390" else 1440
+    args.out.mkdir(parents=True, exist_ok=True)
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(executable_path=args.chromium_path, args=FLAGS)
+        ctx = context(browser, args, width)
+        ctx.add_init_script(LCP)
+        page, errors = load(ctx, args)
+        replay(page, args.timeout)
+        sample = bounded(page, f"""() => new Promise(resolve => {{
+            let start, last, frames = 0;
+            const intervals = [];
+            function tick(t) {{
+                if(start === undefined) start = t;
+                if(last !== undefined) {{ frames++; intervals.push(t-last); }}
+                last=t;
+                if(t-start >= {args.seconds * 1000}) resolve({{fps:frames*1000/(t-start), frames, elapsedMs:t-start,
+                    maxFrameMs:Math.max(...intervals)}});
+                else requestAnimationFrame(tick);
+            }}
+            requestAnimationFrame(tick);
+        }})""", args.seconds * 1000 + args.timeout)
+        gl = webgl(page)
+        lcp = page.evaluate("window.__udLCP")
+        page.screenshot(path=args.out / "scene.png")
+        ctx.close()
+        reduced_ctx = context(browser, args, width, reduced_motion="reduce")
+        reduced_page, reduced_errors = load(reduced_ctx, args)
+        replay(reduced_page, args.timeout)
+        reduced_page.screenshot(path=args.out / "reduced.png")
+        reduced_ctx.close()
+        browser.close()
+        fallback_browser = pw.chromium.launch(executable_path=args.chromium_path, args=["--disable-webgl"])
+        fallback_ctx = context(fallback_browser, args, width)
+        fallback_page, fallback_errors = load(fallback_ctx, args)
+        replay(fallback_page, args.timeout)
+        fallback_gl = webgl(fallback_page)
+        fallback_page.screenshot(path=args.out / "fallback.png")
+        fallback_ctx.close()
+        fallback_browser.close()
+    return report(args.out, "scene-qa.json", {
+        "url": args.url, "profile": args.profile, "environment": "lab (SwiftShader; not device FPS)",
+        "webgl": gl, "sample": sample, "lcpMs": lcp, **errors, "reducedErrors": reduced_errors,
+        "fallback": {"webgl": fallback_gl, **fallback_errors, "screenshot": "fallback.png"},
+        "screenshot": "scene.png", "reducedMotion": "reduced.png",
+        "pass": gl["available"] and not any(errors.values()) and not any(reduced_errors.values())
+                and not any(fallback_errors.values())})
+
+
+if __name__ == "__main__":
+    run(main)

@@ -38,7 +38,7 @@ eval:
 
 const received = [];
 let scenario = "initial";
-let triedToSkip = false;
+const attempts = [];
 let parallelSent = false;
 let childrenInFlight = 0;
 let maximumParallelChildren = 0;
@@ -46,25 +46,16 @@ let wireError;
 const owned = /<omp-ultradesign-policy>[\s\S]*?<\/omp-ultradesign-policy>/g;
 const systemText = payload => payload.messages.filter(message => ["system", "developer"].includes(message.role))
   .map(message => typeof message.content === "string" ? message.content : message.content.map(block => block.text ?? "").join("\n")).join("\n");
-const checkpoint = stage => ({
-  name: "ultradesign_checkpoint",
-  arguments: { action: "complete", stage, evidence: [`${stage}.json: scripted installed-host checkpoint evidence`] },
-});
-const interview = ["direction", "typography", "palette", "status", "density"];
-const gate = id => ({
-  name: "ultradesign_checkpoint",
-  arguments: { action: "gate", gate: {
-    id, question: `Review ${id}?`, evidence: [`${id}.html`],
-    ...(["system", "catalog", "map", "final"].includes(id) ? {} : {
-      options: [
-        { number: 1, label: "First", evidence: `${id}.html#first` },
-        { number: 2, label: "Second", evidence: `${id}.html#second` },
-      ],
-      ...(id === "references" ? {} : { recommended: 1 }),
-    }),
-  } },
-});
-const readStateField = (system, key, end) => JSON.parse(system.split(`${key}: `)[1].split(end)[0]);
+const tool = args => ({ name: "ultradesign_checkpoint", arguments: args });
+const checkpoint = stage => tool({ action: "complete", stage, evidence: [`${stage}.json: scripted installed-host checkpoint evidence`] });
+const gate = id => tool({ action: "gate", gate: {
+  id, artifact: [`https://share.example/${id}.html`], reason: `The ${id} artifact serves the brief's core task.`,
+  lookAt: ["The first screen", "The contact path"],
+  question: "Walk through it as your visitor: where did you stop or re-read, and what were you looking for?",
+} });
+const gated = (stage, mode) => ["frame", "structure", "references", "directions", "assets", "system", "motion", "map", "slice", "final"].includes(stage)
+  && !(mode === "plan" && stage === "system");
+const between = (system, key, end) => JSON.parse(system.split(`${key}: `)[1].split(end)[0]);
 const server = Bun.serve({
   hostname: "127.0.0.1", port: 0,
   async fetch(request) {
@@ -74,59 +65,78 @@ const server = Bun.serve({
       const system = systemText(payload);
       const child = system.includes("role=sub;");
       const stage = /Active stage: ([a-z]+)/.exec(system)?.[1];
-      const pending = stage ? readStateField(system, "Open owner gate", ". Owner decisions:") : null;
-      const decisions = stage ? readStateField(system, "Owner decisions", ". Owner feedback:") : [];
-      const rounds = stage ? readStateField(system, "QA evidence", ".\n") : [];
-      received.push({ scenario, child, stage, pending, decisions, payload });
-      let tool;
+      const mode = /Mode: ([a-z]+)/.exec(system)?.[1];
+      const depth = /Depth: (not stated|full|short)/.exec(system)?.[1];
+      const pending = stage ? between(system, "Waiting for the owner", ". Owner approvals:") : null;
+      const decisions = stage ? between(system, "Owner approvals", ". Owner revisions:") : [];
+      const feedback = stage ? between(system, "Owner revisions", ". Interview answers:") : [];
+      const rounds = stage ? between(system, "Review evidence", ". Real-user validation") : [];
+      const last = payload.messages.at(-1);
+      const rejected = last?.role === "tool" && /Error|requires|needs|pending/.test(JSON.stringify(last.content));
+      received.push({ scenario, child, stage, mode, depth, pending, decisions, feedback, payload });
+      let call;
       let text = `Observed ${scenario}, ${stage ?? "inactive"}.`;
+      const replies = pending?.exchanges.at(-1).replies ?? [];
       if (child) {
         childrenInFlight++;
         maximumParallelChildren = Math.max(maximumParallelChildren, childrenInFlight);
         await new Promise(resolve => setTimeout(resolve, 120));
         childrenInFlight--;
         text = `Independent ${payload.model} evidence: inspected the assigned read-only fixture.`;
-      } else if (scenario === "followup" && stage === "references" && !triedToSkip) {
-        triedToSkip = true;
-        tool = checkpoint(stage);
-      } else if (scenario === "inferred-review" && stage === "frame") {
-        tool = { name: "ultradesign_checkpoint", arguments: { action: "scope", mode: "review" } };
+      } else if (pending && replies.length) {
+        const words = replies.map(reply => reply.text).join(" ");
+        if (scenario === "followup" && attempts.length === 0) {
+          attempts.push("complete");
+          call = checkpoint(stage);
+        } else if (scenario === "followup" && attempts.length === 1) {
+          attempts.push("invented-approval");
+          call = tool({ action: "resolve", resolution: { outcome: "approved", extraction: "Invented approval.", quote: "go ahead" } });
+        } else if (words.includes("go ahead")) {
+          call = tool({ action: "resolve", resolution: { outcome: "approved", extraction: "No change requested.", quote: "go ahead" } });
+        } else if (words.includes("revise")) {
+          call = tool({ action: "resolve", resolution: { outcome: "revise", extraction: "Pressed state → visitor unsure the tap registered → visible pressed fill." } });
+        } else {
+          call = tool({ action: "resolve", resolution: { outcome: "follow_up", extraction: "No change and no go-ahead.",
+            followUp: "Before we move on, is there a moment on this screen that still bothers you? Describe where." } });
+        }
       } else if (stage && stage !== "done" && !pending) {
-        if (scenario === "resume" && stage === "qa" && !parallelSent) {
+        if (mode === "implement" && stage === "frame" && depth === "not stated") {
+          call = scenario === "inferred-review" ? tool({ action: "scope", mode: "review" })
+            : scenario === "shared" ? tool({ action: "scope", depth: "full" })
+            : tool({ action: "scope", depth: "short", include: ["references"] });
+        } else if (stage === "review" && !rounds.length && scenario === "owner" && !parallelSent) {
           parallelSent = true;
-          tool = {
+          call = {
             name: "task",
             arguments: {
-              context: "Installed-host transport check. Independent read-only reference and QA evidence; no edits, commands, or tests.",
+              context: "Installed-host transport check. Independent read-only reference and review evidence; no edits, commands, or tests.",
               tasks: [
                 { name: "References", agent: "scout", model: "ultradesign-local/reference",
                   task: "Return reference evidence from the supplied fixture context only. Do not call tools or edit.",
                   solutionSpace: "One fixed read-only evidence response." },
-                { name: "VisualQA", agent: "reviewer", model: "ultradesign-local/judge",
-                  task: "Return independent QA evidence from the supplied fixture context only. Do not call tools or edit.",
+                { name: "Review", agent: "reviewer", model: "ultradesign-local/judge",
+                  task: "Return independent review evidence from the supplied fixture context only. Do not call tools or edit.",
                   solutionSpace: "One fixed read-only evidence response." },
               ],
             },
           };
-        } else if (stage === "qa" && !rounds.length) {
-          tool = { name: "ultradesign_checkpoint", arguments: {
-            action: "qa_round", qaRound: { round: 0, method: "fallback", report: "qa/baseline.md", openFindings: [] },
-          } };
-        } else {
-          const nextGate = stage === "interview" ? interview.find(id => !decisions.some(decision => decision.id === id))
-            : (["references", "catalog", "map", "final"].includes(stage) || (stage === "system" && scenario !== "plan")) ? stage : undefined;
-          tool = nextGate && !decisions.some(decision => decision.id === nextGate) ? gate(nextGate) : checkpoint(stage);
+        } else if (stage === "review" && !rounds.length) {
+          call = tool({ action: "qa_round", qaRound: { round: 0, method: "fallback", reviewer: "independent", report: "qa/baseline.md", openFindings: [] } });
+        } else if (gated(stage, mode) && !decisions.some(decision => decision.id === stage) && !rejected) {
+          call = gate(stage);
+        } else if (!rejected) {
+          call = checkpoint(stage);
         }
       }
       const id = `chatcmpl-${received.length}`;
       const chunk = delta => ({ id, object: "chat.completion.chunk", created: 1, model: payload.model,
         choices: [{ index: 0, delta, finish_reason: null }] });
-      const start = tool ? chunk({ role: "assistant", tool_calls: [{
+      const start = call ? chunk({ role: "assistant", tool_calls: [{
         index: 0, id: `call-${received.length}`, type: "function",
-        function: { name: tool.name, arguments: JSON.stringify(tool.arguments) },
+        function: { name: call.name, arguments: JSON.stringify(call.arguments) },
       }] }) : chunk({ role: "assistant", content: text });
       const end = chunk({});
-      end.choices[0].finish_reason = tool ? "tool_calls" : "stop";
+      end.choices[0].finish_reason = call ? "tool_calls" : "stop";
       return new Response(`data: ${JSON.stringify(start)}\n\ndata: ${JSON.stringify(end)}\n\ndata: [DONE]\n\n`,
         { headers: { "Content-Type": "text/event-stream" } });
     } catch (error) {
@@ -148,7 +158,7 @@ const env = {
   ULTRADESIGN_TEST_LOG: hookLog,
   ULTRADESIGN_MODEL: "ultradesign-local/builder",
   ULTRADESIGN_MODELS: JSON.stringify({
-    references: "ultradesign-local/reference", system: "ultradesign-local/architect", qa: "ultradesign-local/judge",
+    references: "ultradesign-local/reference", system: "ultradesign-local/architect", review: "ultradesign-local/judge",
   }),
   ULTRADESIGN_THINKING_LEVEL: "off",
 };
@@ -218,41 +228,49 @@ try {
   for (const name of ["ud", "ultradesign"]) {
     assert(commands.some(command => command.name === name), `Missing ${name} in native command discovery`);
   }
+  const main = () => received.filter(item => !item.child);
+  const visited = name => [...new Set(main().filter(item => item.scenario === name).map(item => item.stage))];
+  const goAhead = async (count, words = "Reads right to me, go ahead.") => {
+    for (let index = 0; index < count; index++) await client.prompt(words);
+  };
   await client.prompt("/ud Build the fixture account screen");
-  assert.equal(received.at(-1).stage, "references");
-  assert.equal(received.at(-1).pending.id, "references");
+  assert.equal(main().at(-1).stage, "frame");
+  assert.equal(main().at(-1).depth, "short");
+  assert.equal(main().at(-1).pending.gate.id, "frame");
   scenario = "followup";
   await client.prompt("Continue without a selection.");
-  assert(triedToSkip);
-  assert.equal(received.at(-1).pending.id, "references");
-  assert.equal(received.at(-1).decisions.length, 0);
+  assert.deepEqual(attempts, ["complete", "invented-approval"], "Skip and invented-approval attempts were not both made");
+  assert.equal(main().at(-1).pending.gate.id, "frame");
+  assert.equal(main().at(-1).decisions.length, 0, "A reply without a go-ahead must not approve the gate");
+  assert.equal(main().at(-1).pending.exchanges.length, 2, "The gate should carry one open follow-up");
+  assert.equal(main().at(-1).pending.exchanges[0].replies[0].text, "Continue without a selection.");
+  await client.prompt("/ud status", false);
   const { sessionFile } = await client.rpc("get_state");
   assert.equal(typeof sessionFile, "string");
   await client.close();
   client = undefined;
-  scenario = "resume";
+  scenario = "owner";
   client = startClient(sessionFile);
   const beforeResume = received.length;
   await client.prompt("/ultradesign resume", false);
   assert.equal(received.length, beforeResume, "Resume at an open gate should render it without calling the model");
-  await client.prompt("/ud pick 1,2 Compare the hierarchy");
-  assert.equal(received.at(-1).stage, "interview");
-  assert.equal(received.at(-1).pending.id, "direction");
-  for (const id of interview) await client.prompt(`/ud answer ${id} 2`);
-  assert.equal(received.at(-1).pending.id, "system");
-  await client.prompt("/ud revise system Show the pressed state");
-  assert.equal(received.at(-1).pending.id, "system");
-  await client.prompt("/ultradesign approve system");
-  assert.equal(received.at(-1).pending.id, "catalog");
-  await client.prompt("/ud approve catalog");
-  assert.equal(received.at(-1).pending.id, "map");
-  await client.prompt("/ud revise map Make the retry check P1");
-  assert.equal(received.at(-1).pending.id, "map");
-  await client.prompt("/ud approve map");
-  assert.equal(received.at(-1).pending.id, "final");
-  assert(!received.some(item => item.scenario === "resume" && item.stage === "motion"));
-  await client.prompt("/ud approve final");
-  assert.equal(received.filter(item => !item.child).at(-1).stage, "done");
+  await goAhead(1);
+  assert.equal(main().at(-1).pending.gate.id, "structure");
+  assert.equal(main().at(-1).decisions[0].quote, "go ahead");
+  assert.equal(main().at(-1).decisions[0].by, "owner-reply");
+  await goAhead(3);
+  assert.equal(main().at(-1).pending.gate.id, "system");
+  await client.prompt("Please revise: the pressed state is unclear.");
+  assert.equal(main().at(-1).pending.gate.id, "system");
+  assert.equal(main().at(-1).feedback.at(-1).id, "system");
+  await client.prompt("/ultradesign approve system the pressed state reads now");
+  assert.equal(main().at(-1).pending.gate.id, "slice");
+  await goAhead(1);
+  assert.equal(main().at(-1).pending.gate.id, "final");
+  await client.prompt("/ud real-user Two clinic directors completed the contact task on their phones.", false);
+  await goAhead(1);
+  assert.equal(main().at(-1).stage, "done");
+  assert.deepEqual(visited("owner"), ["frame", "structure", "references", "directions", "system", "slice", "review", "final", "done"]);
   assert(received.some(item => item.child && item.payload.model === "reference"));
   assert(received.some(item => item.child && item.payload.model === "judge"));
   assert(maximumParallelChildren >= 2, "Native task batch did not run independent children concurrently");
@@ -261,24 +279,19 @@ try {
   }
   scenario = "plan";
   await client.prompt("/ultradesign plan Plan the fixture dashboard");
-  await client.prompt("/ud pick 1 Plan evidence");
-  for (const id of interview) await client.prompt(`/ud answer ${id} 1`);
-  const visited = name => [...new Set(received.filter(item => item.scenario === name).map(item => item.stage))];
-  assert.deepEqual(visited("plan"), ["frame", "references", "interview", "system", "done"]);
+  await goAhead(4);
+  assert.deepEqual(visited("plan"), ["frame", "structure", "references", "directions", "system", "done"]);
   scenario = "review";
   await client.prompt("/ud review Audit the existing fixture without implementation");
-  assert.deepEqual(visited("review"), ["qa", "done"]);
+  assert.deepEqual(visited("review"), ["review", "done"]);
   scenario = "inferred-review";
   await client.prompt("/ud Tell me where the existing fixture falls short");
-  assert.deepEqual(visited("inferred-review"), ["frame", "qa", "done"]);
+  assert.deepEqual(visited("inferred-review"), ["frame", "review", "done"]);
   scenario = "shared";
-  await client.prompt("/ultradesign --motion --shared Build a system for two fixture projects");
-  await client.prompt("/ud pick 2");
-  for (const id of interview) await client.prompt(`/ud answer ${id} 2`);
-  for (const id of ["system", "catalog", "map", "final"]) await client.prompt(`/ud approve ${id}`);
+  await client.prompt("/ultradesign --shared Build a system for two fixture projects");
+  await goAhead(10);
   assert.deepEqual(visited("shared"),
-    ["frame", "references", "interview", "system", "catalog", "map", "generate", "qa", "motion", "final", "sharing", "done"]);
-  await client.prompt("/ud status", false);
+    ["frame", "structure", "references", "directions", "assets", "system", "motion", "map", "slice", "buildout", "review", "final", "sharing", "done"]);
   await client.prompt("/ud off", false);
   scenario = "off";
   await client.prompt("Return ordinary session output.");
@@ -296,21 +309,24 @@ try {
     if (systemText(before[index].payload) !== systemText(received[index].payload)) refreshed = true;
   }
   assert(refreshed, "No mid-turn state refresh was observed");
-  const main = received.filter(item => !item.child && item.stage);
-  for (const item of main) {
-    const expected = { references: "reference", system: "architect", catalog: "builder", map: "builder", generate: "builder", motion: "builder", qa: "judge", sharing: "builder" }[item.stage];
+  for (const item of main().filter(item => item.stage)) {
+    const expected = { references: "reference", system: "architect", review: "judge" }[item.stage] ?? (item.stage === "done" ? undefined : "builder");
     if (expected) assert.equal(item.payload.model, expected, `Wrong native model route for ${item.stage}`);
     assert(systemText(item.payload).includes(join(copied, "skills/ultradesign/SKILL.md")));
     assert.equal((systemText(item.payload).match(/<omp-ultradesign-policy>/g) || []).length, 1);
   }
   const entries = (await readFile(sessionFile, "utf8")).trim().split("\n").map(line => JSON.parse(line));
-  const states = entries.filter(entry => entry.type === "custom" && entry.customType === "ultradesign:state");
-  assert(states.some(entry => entry.data.pending?.id === "references" && !entry.data.decisions.length));
-  assert(states.some(entry => entry.data.pending?.id === "direction" && entry.data.decisions[0]?.choices.join() === "1,2"));
-  assert(states.some(entry => entry.data.checkpoints.length === 9 && entry.data.stage === "done"));
-  assert(states.some(entry => entry.data.shared && entry.data.motion && entry.data.checkpoints.length === 11 && entry.data.stage === "done"));
-  assert.equal(states.at(-1).data.active, false);
-  console.log(`OMP installed-host checks passed: aliases, persisted owner gates, no gate skip, read-only modes, QA baseline, optional motion/sharing, model routes, native parallel task, targeted payload refresh. Evidence: ${temporary}`);
+  const states = entries.filter(entry => entry.type === "custom" && entry.customType === "ultradesign:state").map(entry => entry.data);
+  assert(states.every(state => state.version === 3));
+  assert(states.some(state => state.pending?.gate?.id === "frame" && state.pending.exchanges[0].replies[0]?.source === "rpc" && !state.decisions.length));
+  assert(!states.some(state => state.pending?.exchanges.some(exchange => exchange.replies.some(reply => reply.text.startsWith("/")))),
+    "Slash commands must never be recorded as owner replies");
+  assert(states.some(state => state.decisions.some(decision => decision.id === "system" && decision.by === "owner-command" && decision.quote === "the pressed state reads now")));
+  assert(states.some(state => state.realUser[0]?.note.startsWith("Two clinic directors")));
+  assert(states.some(state => state.checkpoints.length === 8 && state.stage === "done" && state.depth === "short"));
+  assert(states.some(state => state.shared && state.depth === "full" && state.checkpoints.length === 13 && state.stage === "done"));
+  assert.equal(states.at(-1).active, false);
+  console.log(`OMP installed-host checks passed: aliases, owner replies captured from input, quote-bound approval, rejected skip and invented approval, follow-up, revise, command approval, real-user row, depth, read-only modes, review baseline, sharing, model routes, native parallel task, targeted payload refresh. Evidence: ${temporary}`);
 } finally {
   if (client) await client.close();
   server.stop(true);

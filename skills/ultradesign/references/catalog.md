@@ -17,6 +17,10 @@ record each exact URL, visible state, and decision it helps with.
 | [Pinterest](https://www.pinterest.com/) | Visual collections and public references for a specific composition question. Record where the work can actually be seen. |
 | [21st.dev](https://21st.dev/community/components) | Landing and component compositions; use these for anatomy and interaction rather than full product flows. |
 
+A picked example is read for principles, not copied: each pick becomes a
+[deconstruction card](../assets/templates/deconstruction-card.md) with a "not
+carried" line for its layout and signature elements.
+
 Keep these core browse links manual when automated access is restricted or
 unverified. Use authorized first-party pages in fresh tabs for CDP observations.
 A blank, blocked, or consent-only screenshot records access, not a screen.

@@ -16,7 +16,7 @@ function binding(scope, name) {
   }
 }
 
-export function createEslintConfig({ systemEntries, sourceFiles, tokenNames, tsParser }) {
+export function createEslintConfig({ systemEntries, motionEntries = [], sceneEntries = [], sourceFiles, tokenNames, tsParser }) {
   const files = new Set(sourceFiles);
   const contains = (entry, filename) => {
     if (!entry.directory) return filename === entry.path;
@@ -40,16 +40,39 @@ export function createEslintConfig({ systemEntries, sourceFiles, tokenNames, tsP
     create(context) {
       const filename = context.filename;
       const inSystem = systemEntries.some((entry) => contains(entry, filename));
+      const inVisual = [...motionEntries, ...sceneEntries].some((entry) => contains(entry, filename));
       const report = (node, message) => context.report({ node, message });
+      const checkImport = (node, source) => {
+        if (!inVisual && /^(?:gsap|motion|three)(?:\/|$)|^@react-three\//.test(source ?? '')) {
+          report(node, 'Import motion and scene libraries only inside motionEntries or sceneEntries.');
+        }
+      };
+      const checkColor = (node, text) => {
+        if (typeof text === 'string' && /^url\(#[\w-]+\)$/.test(text)) return;
+        if (typeof text === 'string' && /#[\da-f]{3,8}\b|\b(?:rgba?|hsla?)\s*\(/i.test(text)) {
+          report(node, 'Use generated tokens instead of literal colors in JS/TS.');
+        }
+      };
 
       return {
+        ImportDeclaration(node) { checkImport(node, node.source.value); },
+        ExportNamedDeclaration(node) { if (node.source) checkImport(node, node.source.value); },
+        ExportAllDeclaration(node) { checkImport(node, node.source.value); },
+        ImportExpression(node) { checkImport(node, node.source.value); },
+        Literal(node) {
+          checkColor(node, node.value);
+          if (typeof node.value === 'number' && /^0x/i.test(node.raw ?? '')) {
+            report(node, 'Use generated tokens instead of hexadecimal numeric colors in JS/TS.');
+          }
+        },
+        TemplateElement(node) { checkColor(node, node.value.cooked); },
         JSXOpeningElement(node) {
           const tag = node.name;
           if (tag.type === 'JSXIdentifier' && tag.name === 'style') {
             report(tag, 'Move embedded styles to a linted CSS file.');
             return;
           }
-          if (inSystem) return;
+          if (inSystem || inVisual) return;
           if (tag.type === 'JSXIdentifier' && /^[a-z]/.test(tag.name)) {
             if (controls.has(tag.name)) report(tag, 'Import controls from a configured system entry.');
             if (tag.name.includes('-')) report(tag, 'Import reusable UI from a configured system entry.');
@@ -106,13 +129,14 @@ export function createEslintConfig({ systemEntries, sourceFiles, tokenNames, tsP
         JSXAttribute(node) {
           if (node.name.type !== 'JSXIdentifier') return;
           const name = node.name.name;
-          if (name === 'style' || name === 'fontSize' || name === 'fontFamily'
+          if ((name === 'style' && !inVisual) || name === 'fontSize' || name === 'fontFamily'
               || name === 'font-size' || name === 'font-family') {
             report(node, 'Move typography and inline styles to linted, tokenized CSS.');
             return;
           }
           if (!paint.has(name)) return;
           const value = node.value?.type === 'JSXExpressionContainer' ? node.value.expression : node.value;
+          if (inVisual && value && ['MemberExpression', 'CallExpression', 'Identifier'].includes(value.type)) return;
           const text = typeof value?.value === 'string' ? value.value.trim() : undefined;
           if (text && (paintKeywords.has(text) || /^url\(#[\w-]+\)$/.test(text))) return;
           const token = text?.match(/^var\(\s*(--color-[\w-]+)\s*\)$/)?.[1];
@@ -120,14 +144,22 @@ export function createEslintConfig({ systemEntries, sourceFiles, tokenNames, tsP
           report(node, 'Use a generated color token or currentColor for JSX paint.');
         },
         JSXSpreadAttribute(node) {
-          if (!inSystem) report(node, 'Pass props explicitly so inline styling can be checked.');
+          if (!inSystem && !inVisual) report(node, 'Pass props explicitly so inline styling can be checked.');
         },
         MemberExpression(node) {
           const name = node.computed ? node.property.value : node.property.name;
-          if (name === 'style') report(node, 'Use CSS classes instead of reading or writing inline styles.');
+          if (name === 'style' && !inVisual) report(node, 'Use CSS classes instead of reading or writing inline styles.');
+          if (name === 'requestAnimationFrame' && !inVisual) report(node, 'Schedule animation only inside motionEntries or sceneEntries.');
+        },
+        Identifier(node) {
+          if (node.name === 'requestAnimationFrame' && !inVisual
+              && !(node.parent.type === 'MemberExpression' && node.parent.property === node)) {
+            report(node, 'Schedule animation only inside motionEntries or sceneEntries.');
+          }
         },
         CallExpression(node) {
           const callee = node.callee;
+          if (callee.name === 'require') checkImport(node, node.arguments[0]?.value);
           if (callee.name === 'createElement'
               || (callee.type === 'MemberExpression' && (callee.property.name ?? callee.property.value) === 'createElement')) {
             report(node, 'Use JSX so imports and styling can be checked.');

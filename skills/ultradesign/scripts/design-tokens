@@ -3,7 +3,10 @@
 # requires-python = ">=3.10"
 # dependencies = ["PyYAML==6.0.3"]
 # ///
-"""Compile DESIGN.md alpha tokens and nested semantic aliases; no app inputs."""
+"""Compile DESIGN.md to CSS, catalog JSON and optional typed scene tokens.
+
+Exit 0: generated/fresh; 1: stale outputs in --check; 2: invalid input or I/O.
+"""
 
 import argparse
 import json
@@ -170,7 +173,54 @@ def compile_design(design):
     css = "/* Generated from DESIGN.md by design-tokens. Edit DESIGN.md, not this file. */\n:root {\n"
     css += "".join(f"  {prop}: {entry[1]};\n" for prop, entry in sorted(variables.items()))
     css += "}\n"
+    motion = catalog["motion"]
+    if any(entry["path"] in ("motion.duration", "motion.easing") for entry in motion):
+        raise DesignError("motion.duration and motion.easing must be token groups.")
+    durations = [entry for entry in motion if entry["path"].startswith("motion.duration.")]
+    if durations and (len(durations) != 6 or any(len(entry["path"].split(".")) != 3 for entry in durations)):
+        raise DesignError("motion.duration must contain exactly six duration leaves.")
+    for entry in durations:
+        duration_ms(entry)
+    for entry in motion:
+        if entry["path"].startswith("motion.easing."):
+            parts = entry["path"].split(".")
+            if len(parts) != 4 or parts[2] not in ("productive", "expressive"):
+                raise DesignError("Use motion.easing.productive.* or motion.easing.expressive.*.")
+            if not isinstance(entry["resolved"], str):
+                raise DesignError(f"Easing must be a CSS string: {entry['path']}")
     return css, json.dumps(catalog, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+
+
+def duration_ms(entry):
+    match = re.fullmatch(r"(\d+(?:\.\d+)?)\s*(ms|s)", str(entry["resolved"]))
+    if not match:
+        raise DesignError(f"Duration must be a nonnegative CSS time (ms or s): {entry['path']}")
+    value = float(match[1]) * (1000 if match[2] == "s" else 1)
+    if not math.isfinite(value):
+        raise DesignError(f"Duration must be finite: {entry['path']}")
+    return int(value) if value.is_integer() else value
+
+
+def compile_typescript(catalog):
+    """Keep semantic paths; aliases are resolved and duration numbers are milliseconds."""
+    tokens = {"colors": {}, "motion": {"duration": {}, "easing": {}}}
+    for group in ("colors", "motion"):
+        for entry in json.loads(catalog)[group]:
+            path = entry["path"].split(".")
+            if group == "motion" and path[1] not in ("duration", "easing"):
+                continue
+            target = tokens
+            for part in path[:-1]:
+                target = target.setdefault(part, {})
+            target[path[-1]] = duration_ms(entry) if path[:2] == ["motion", "duration"] else entry["resolved"]
+    return (
+        "// Generated from DESIGN.md by design-tokens. Do not edit.\n"
+        "// Motion durations are milliseconds; colors and easings are resolved CSS values.\n"
+        "export const tokens = " + json.dumps(tokens, ensure_ascii=False, indent=2, allow_nan=False) + " as const;\n"
+        "export type Tokens = typeof tokens;\n"
+        "export type MotionDuration = keyof Tokens['motion']['duration'];\n"
+        "export type ColorToken = keyof Tokens['colors'];\n"
+    )
 
 
 def main():
@@ -178,14 +228,19 @@ def main():
     parser.add_argument("design", type=Path)
     parser.add_argument("--out", type=Path, required=True, help="Generated CSS destination.")
     parser.add_argument("--catalog", type=Path, required=True, help="Generated JSON destination.")
+    parser.add_argument("--ts", type=Path, help="Optional generated TypeScript destination (durations in ms).")
     parser.add_argument("--check", action="store_true", help="Read-only: exit 1 for missing/stale outputs.")
     args = parser.parse_args()
     try:
-        paths = (args.design.resolve(), args.out.resolve(), args.catalog.resolve())
-        if len(set(paths)) != 3:
-            raise DesignError("DESIGN.md, CSS and catalog paths must be distinct.")
+        paths = [args.design.resolve(), args.out.resolve(), args.catalog.resolve()]
+        if args.ts:
+            paths.append(args.ts.resolve())
+        if len(set(paths)) != len(paths):
+            raise DesignError("DESIGN.md and all output paths must be distinct.")
         css, catalog = compile_design(load_design(args.design))
         outputs = [(args.out, css), (args.catalog, catalog)]
+        if args.ts:
+            outputs.append((args.ts, compile_typescript(catalog)))
         if args.check:
             stale = [str(path) for path, content in outputs if not path.is_file() or path.read_text(encoding="utf-8") != content]
             if stale:

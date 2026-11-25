@@ -17,6 +17,8 @@ async function check(app) {
       || typeof config.sources !== 'string' || !config.sources.trim()
       || !Array.isArray(config.systemEntries) || !config.systemEntries.length
       || config.systemEntries.some((entry) => typeof entry !== 'string' || !entry.trim())
+      || ['motionEntries', 'sceneEntries'].some((key) => config[key] !== undefined
+        && (!Array.isArray(config[key]) || config[key].some((entry) => typeof entry !== 'string' || !entry.trim())))
       || !Array.isArray(config.fontFaces)
       || config.fontFaces.some((font) => typeof font !== 'string' || !font.trim())) {
     throw new Error('ud-guard.config.json requires tokens, sources, systemEntries and fontFaces; see guard/README.md.');
@@ -39,14 +41,16 @@ async function check(app) {
       || !(await stat(tokensFile)).isFile()) {
     throw new Error('sources must name a directory and tokens must name a CSS file.');
   }
-  const systemEntries = [];
-  for (const entry of config.systemEntries) {
-    const path = await localPath(entry);
-    const info = await stat(path);
-    if (!inside(sourceRoot, path) || (!info.isDirectory() && !scripts.has(extname(path)))) {
-      throw new Error(`System entries must be JS/TS files or directories inside sources: ${entry}`);
+  const entries = { systemEntries: [], motionEntries: [], sceneEntries: [] };
+  for (const key of Object.keys(entries)) {
+    for (const entry of config[key] ?? []) {
+      const path = await localPath(entry);
+      const info = await stat(path);
+      if (!inside(sourceRoot, path) || (!info.isDirectory() && !scripts.has(extname(path)))) {
+        throw new Error(`${key} must be JS/TS files or directories inside sources: ${entry}`);
+      }
+      entries[key].push({ path, directory: info.isDirectory() });
     }
-    systemEntries.push({ path, directory: info.isDirectory() });
   }
 
   const sourceFiles = [];
@@ -110,7 +114,7 @@ async function check(app) {
     cwd,
     overrideConfigFile: true,
     ignore: false,
-    overrideConfig: createEslintConfig({ systemEntries, sourceFiles, tokenNames, tsParser }),
+    overrideConfig: createEslintConfig({ ...entries, sourceFiles, tokenNames, tsParser }),
   });
   const results = await eslint.lintFiles(scriptFiles);
   const output = (await eslint.loadFormatter('stylish')).format(results);

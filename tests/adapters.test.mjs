@@ -24,13 +24,17 @@ for (const host of hosts) {
     assert.equal(files.get(`skills/${name}/SKILL.md`).toString(), internal
       ? canonical.replace(/^name: ultradesign\r?$/m, 'name: ultradesign-workflow') : canonical);
     for (const relative of [
-      'prompts/01-frame.md', 'prompts/02-references.md', 'prompts/03-interview.md',
-      'prompts/04-system.md', 'prompts/05-catalog.md', 'prompts/06-map.md', 'prompts/07-generate.md',
-      'prompts/08-visual-qa.md', 'prompts/09-motion.md', 'prompts/10-final.md', 'prompts/11-sharing.md',
+      'prompts/01-frame.md', 'prompts/02-structure.md', 'prompts/03-references.md', 'prompts/04-directions.md',
+      'prompts/05-assets.md', 'prompts/06-system.md', 'prompts/07-motion.md', 'prompts/08-map.md',
+      'prompts/09-slice.md', 'prompts/10-buildout.md', 'prompts/11-review.md', 'prompts/12-final.md', 'prompts/13-sharing.md',
+      'references/questions.md', 'references/roles.md',
       'scripts/reference-board', 'scripts/palette-board', 'scripts/design-tokens', 'scripts/design-lint',
       'scripts/a2ui-validate', 'scripts/hierarchy-check', 'scripts/screen-map',
+      'scripts/stylescape-board', 'scripts/animatic', 'scripts/text-only-lint', 'scripts/originality-check',
+      'scripts/scene-qa', 'scripts/visual_tools.py',
       'assets/a2ui/v1_0/agent_to_renderer.json', 'assets/templates/guard/check.mjs',
-      'assets/templates/interview-log.md', 'assets/templates/system-page/README.md',
+      'assets/templates/brief.md', 'assets/templates/structure.md', 'assets/templates/decisions.md',
+      'assets/templates/deconstruction-card.md', 'assets/templates/assets.json', 'assets/templates/storybook/README.md',
     ]) assert.ok(files.has(`skills/${name}/${relative}`), `${host} bundle missing ${relative}`);
     const adapters = [...files.keys()].filter((file) => !file.startsWith(`skills/${name}/`) && !file.startsWith('adapters/omp/'));
     assert.deepEqual(adapters, surfaces[host]);

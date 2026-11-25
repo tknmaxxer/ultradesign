@@ -11,7 +11,11 @@ section (the R3 section that read as empty boxes).
 | after | Brief + catalog + approved `hierarchy.json` + the generate stage | `a2ui-validate --hierarchy` repair loop; render; `hierarchy-check --hierarchy`; repair from its findings |
 
 Both use the same model, thinking level and repair budget, through the local
-`omp` CLI with tools, skills, rules and context files off.
+`omp` CLI with tools, skills, rules and context files off. The "generate
+stage" is [generate-prompt-v05.md](generate-prompt-v05.md), the v0.5
+`prompts/07-generate.md` frozen at commit `6f7611c`; v0.6 replaced that stage.
+Table drafting uses [hierarchy-guide-v05.md](hierarchy-guide-v05.md), the
+v0.5 hierarchy guide frozen at the same commit.
 
 ## Run
 

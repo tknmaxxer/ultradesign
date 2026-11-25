@@ -9,3 +9,4 @@ CLAUDE.local.md
 /.reference-board/
 .reference-board-cache/
 /.ultradesign/
+__pycache__/

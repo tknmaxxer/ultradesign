@@ -6,20 +6,29 @@ picks components, content and emphasis; colors, type, spacing and layout live
 inside the components. A screen that names an unknown component or a style
 property fails validation before anything renders.
 
+A2UI is the layer for product UI screens (dashboards, consoles, forms) and for
+the content sections of expressive pages. Hero scenes and motion set pieces are
+not free composition: they are catalog `media` / `scene` components that play
+approved assets from `assets.json` and the approved motion spec.
+
 ## Catalog
 
 A catalog is a JSON file following the A2UI catalog definition
 ([vendored schemas](../assets/a2ui/README.md)). Build it from the approved
-`/system` components:
+Storybook components:
 
 - **Roles.** Declare each component's role as
   `"metadata": {"extensions": {"ud_role": "frame" | "content" | "action"}}`.
 - **Frames** are layout containers with a `layout` enum. Each value is an
-  arrangement taken from an approved screen or a picked reference (for example
-  `lead_aside` from an approved list + panel screen, `split` from the picked
-  hero). Add a frame by recreating that arrangement with the system's
-  components, rendering it beside the source at matching widths, and getting it
-  approved with the catalog.
+  arrangement taken from the chosen direction's key frames or an approved screen
+  (for example `lead_aside` from an approved list + panel screen, `split` from
+  the direction's representative screen), built with the system's components
+  and shown as a Storybook story. A picked reference's layout is not a source
+  for a frame: references supply principles through their deconstruction cards.
+- **Media and scene components** (`media`, `scene`) take an asset id from
+  `assets.json` or a scene id from the approved motion spec as an enum, plus a
+  required poster/fallback image and a `reducedMotion` behaviour. Free URLs and
+  free text are not accepted.
 - **Content** components take a required `emphasis` of `p1`, `p2` or `p3`.
   **Action** components take `primary` or `secondary`. The renderer maps these
   to the system's type and button roles; the catalog has no size, color, font,
@@ -53,14 +62,18 @@ renderer:
 - marks the generated area `data-ud-surface="<surfaceId>"` and each component
   root `data-ud-id`, `data-ud-component` and, when present,
   `data-ud-emphasis`, so the hierarchy check can measure it;
-- exposes a `/system` page that shows every catalog component at every
-  emphasis value, for the catalog gate;
+- documents every catalog component at every emphasis value and every reachable
+  state as Storybook stories, so a new component shows up at the build-out gate
+  ([stage 10](../prompts/10-buildout.md));
 - keeps product chrome (wordmark, footer) outside the generated area.
 
 Install the [guard](../assets/templates/guard/README.md) in the renderer
 project and run it before every build. It fails the build on color literals,
 raw font sizes, font families outside the tokens, inline styles and UI imported
-from outside the system.
+from outside the system. Files under `motionEntries` and `sceneEntries` in
+`ud-guard.config.json` may write `.style`, call `requestAnimationFrame` and
+import `gsap`, `motion`, `three` or `@react-three/*`; colours there still come
+from tokens (`tokens.ts` or `getComputedStyle`).
 
 ## Validate
 
@@ -78,4 +91,5 @@ bindings resolve to the declared type; and, with `--hierarchy`, the approved
 table. Exit 0 valid, 1 findings, 2 unreadable input.
 
 Pass the findings back to the generating model verbatim and regenerate. Change
-the catalog only through the catalog gate.
+the catalog only through its owner (the Lead); a new component reaches the
+owner at the build-out gate.

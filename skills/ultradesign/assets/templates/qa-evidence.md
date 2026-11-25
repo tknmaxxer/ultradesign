@@ -1,6 +1,6 @@
 # UX QA round index
 
-- Scope, decision evidence (`brief.md`, `DESIGN.md`, `/system` render):
+- Scope, decision evidence (`brief.md`, `DESIGN.md`, Storybook build, approved animatic and spec):
 - Route, fixture and scenario IDs:
 - Remorsearch version/path, or fallback reason and coverage:
 

@@ -1,0 +1,99 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["playwright==1.65.1"]
+# ///
+"""Measure rendered visual coverage against a composition JSON map.
+
+Input: --url, --map, --widths (390,1440), --min-share (0.15), --out.
+Output: text-only.json, one section result per width with role/share/reason.
+Method: clipped rectangle union of visible image/picture/video/canvas/sized
+SVG, CSS background-image and data-ud-visual regions over section area.
+Overlapping and nested visuals count once. Hidden ancestors do not count.
+Limits: rectangle coverage is not artistic quality or pixel segmentation;
+transparent media and decorative backgrounds still occupy their boxes.
+Typographic roles pass except on expressive pages without ownerException.
+Exit: 0 pass, 1 failed checks (including missing sections), 2 usage/load error.
+"""
+
+import json
+from pathlib import Path
+from visual_tools import FLAGS, context, load, parser, report, run, widths
+
+PROBE = r"""id => {
+    const sections = [...document.querySelectorAll('[data-ud-section]')].filter(e => e.dataset.udSection === id);
+    if (sections.length !== 1) return {visualShare: 0, error: `Expected one section, found ${sections.length}`};
+    const section = sections[0], r = section.getBoundingClientRect();
+    const visible = el => {
+        for (let p = el; p; p = p.parentElement) {
+            const s = getComputedStyle(p);
+            if (s.display === 'none' || s.visibility !== 'visible' || Number(s.opacity) === 0) return false;
+        }
+        return true;
+    };
+    if (!visible(section) || r.width <= 0 || r.height <= 0) return {visualShare: 0, error: 'Section has no visible area'};
+    const boxes = [section, ...section.querySelectorAll('*')].filter(e =>
+        visible(e) && (e.matches('img,picture,video,canvas,svg,[data-ud-visual]') ||
+        getComputedStyle(e).backgroundImage !== 'none')).map(e => {
+            const b = e.getBoundingClientRect();
+            return [Math.max(r.left,b.left),Math.max(r.top,b.top),Math.min(r.right,b.right),Math.min(r.bottom,b.bottom)];
+        }).filter(b => b[2]>b[0] && b[3]>b[1]);
+    const xs = [...new Set(boxes.flatMap(b => [b[0],b[2]]))].sort((a,b)=>a-b);
+    let area = 0;
+    for(let i=1;i<xs.length;i++) {
+        const ys = boxes.filter(b=>b[0]<xs[i] && b[2]>xs[i-1]).map(b=>[b[1],b[3]]).sort((a,b)=>a[0]-b[0]);
+        let length=0, end=-Infinity;
+        for(const [lo,hi] of ys) { length += Math.max(0,hi-Math.max(lo,end)); end=Math.max(end,hi); }
+        area += (xs[i]-xs[i-1])*length;
+    }
+    return {visualShare: area/(r.width*r.height)};
+}"""
+
+
+def main():
+    p = parser(__doc__)
+    p.add_argument("--map", type=Path, required=True)
+    p.add_argument("--widths", type=widths, default=[390, 1440])
+    p.add_argument("--min-share", type=float, default=0.15)
+    args = p.parse_args()
+    if not 0 <= args.min_share <= 1:
+        p.error("--min-share must be between 0 and 1")
+    table = json.loads(args.map.read_text(encoding="utf-8"))
+    roles = {"image", "scene", "product-ui", "illustration", "data", "typographic"}
+    sections = table.get("sections")
+    if table.get("page") not in {"expressive", "reading", "product"} or not isinstance(sections, list) or not sections:
+        raise ValueError("map needs page and nonempty sections")
+    ids = set()
+    for s in sections:
+        if not isinstance(s, dict) or not isinstance(s.get("id"), str) or not s["id"] or s["id"] in ids or s.get("visualRole") not in roles:
+            raise ValueError("sections need unique string ids and a valid visualRole")
+        ids.add(s["id"])
+    from playwright.sync_api import sync_playwright
+    results = []
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(executable_path=args.chromium_path, args=FLAGS)
+        for width in args.widths:
+            ctx = context(browser, args, width)
+            page, errors = load(ctx, args)
+            rows = []
+            for s in sections:
+                probe = page.evaluate(PROBE, s["id"])
+                role = s["visualRole"]
+                reason = probe.get("error")
+                if not reason and role == "typographic":
+                    if table["page"] == "expressive" and not s.get("ownerException"):
+                        reason = "Expressive typographic section requires ownerException"
+                elif not reason and probe["visualShare"] < args.min_share:
+                    reason = f"Visual share below {args.min_share}"
+                rows.append({"id": s["id"], "visualRole": role, **probe, "pass": not reason,
+                             "reason": reason or "Declared visual role satisfied"})
+            results.append({"width": width, "sections": rows, **errors,
+                            "pass": all(r["pass"] for r in rows) and not any(errors.values())})
+            ctx.close()
+        browser.close()
+    return report(args.out, "text-only.json", {"url": args.url, "minShare": args.min_share,
+                  "pass": all(r["pass"] for r in results), "viewports": results})
+
+
+if __name__ == "__main__":
+    run(main)

@@ -82,6 +82,46 @@ components:
         self.run_cli("design-tokens", self.design, "--out", missing, "--catalog", self.catalog, "--check", expected=1)
         self.assertFalse(missing.parent.exists())
 
+    def test_motion_typescript_and_freshness(self):
+        ts = self.root / "tokens.ts"
+        body = """colors:
+  base: "#112233"
+  scene: "{colors.base}"
+motion:
+  duration:
+    instant: 70ms
+    quick: 110ms
+    short: 150ms
+    medium: 240ms
+    long: 400ms
+    signature: 0.7s
+  easing:
+    productive:
+      standard: cubic-bezier(0.2, 0, 0, 1)
+    expressive:
+      standard: "{motion.easing.productive.standard}"
+"""
+        self.generate(body, extra=("--ts", ts))
+        source = ts.read_text()
+        data = json.loads(source.split("export const tokens = ", 1)[1].split(" as const;", 1)[0])
+        self.assertEqual(data["motion"]["duration"]["signature"], 700)
+        self.assertEqual(data["motion"]["duration"]["instant"], 70)
+        self.assertEqual(data["colors"]["scene"], "#112233")
+        self.assertEqual(data["motion"]["easing"]["expressive"]["standard"], "cubic-bezier(0.2, 0, 0, 1)")
+        self.assertIn("--motion-duration-signature: 0.7s;", self.css.read_text())
+        self.generate(body, extra=("--ts", ts, "--check"))
+        ts.write_text("stale")
+        self.generate(body, extra=("--ts", ts, "--check"), expected=1)
+        self.assertEqual(ts.read_text(), "stale")
+        ts.unlink()
+        self.generate(body, extra=("--ts", ts, "--check"), expected=1)
+        self.assertFalse(ts.exists())
+        self.generate(body, extra=("--ts", self.design), expected=2)
+        for invalid in (body.replace("    quick: 110ms\n", ""), body.replace("70ms", "70"),
+                        body.replace("productive:", "other:")):
+            self.generate(invalid, extra=("--ts", ts), expected=2)
+            self.assertFalse(ts.exists())
+
     def test_invalid_inputs_leave_both_outputs_untouched(self):
         bad = [
             ('colors:\n  a: "{colors.absent}"', "Missing token"),

@@ -136,7 +136,8 @@ async function before(options, task, dir, catalog, catalogFile) {
 async function after(options, task, dir, catalog, catalogFile) {
   const tableFile = resolve(options.approved, `${task.id}.json`);
   const table = JSON.parse(await readFile(tableFile, "utf8"));
-  const guide = await readFile(join(skill, "prompts/07-generate.md"), "utf8");
+  // The v0.5 generate stage, frozen so this eval keeps measuring v0.5 after the v0.6 rewrite.
+  const guide = await readFile(join(repo, "evals/v05/generate-prompt-v05.md"), "utf8");
   const prompt = `${fence("catalog", catalog)}${fence("brief", task.brief)}${fence("approved_hierarchy", table)}${fence("stage_instructions", guide)}`
     + `\nUse surfaceId "${task.surfaceId}". Return only the A2UI createSurface message.`;
   let generated = await generateValid(options, dir, "generate", task, catalogFile, prompt, tableFile);
@@ -160,7 +161,7 @@ async function main() {
   options.out = resolve(options.out);
   if (existsSync(options.out)) throw new Error("--out must not exist.");
   await mkdir(options.out, { recursive: true });
-  const guide = await readFile(join(skill, "references/hierarchy.md"), "utf8");
+  const guide = await readFile(join(repo, "evals/v05/hierarchy-guide-v05.md"), "utf8");
   const results = { model: options.model, thinking: options.thinking, phase: options.phase, tasks: {} };
   for (const task of options.selected) {
     const catalogFile = join(options.renderer, task.catalog);

@@ -1,0 +1,101 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["playwright==1.65.1"]
+# ///
+"""Flag near-copy block structure; never compare pixels, text, or colours.
+
+Input: --url, repeated --reference, --width (1440), --threshold (0.85), --out.
+Output: originality.json and index.html with local side-by-side screenshots.
+Method: visible semantic blocks (sections, articles, headers, footers, nav,
+aside, headings, media, explicit data-ud-block) of at least 0.5% viewport area.
+If absent, use direct main/body children. Remove duplicate rectangles.
+Greedily match rectangle pairs by descending intersection-over-union at the
+same CSS width and document coordinates. Score = sum of matched IoUs divided
+by the larger block count, penalizing unmatched blocks. Flag score > threshold.
+Limits: a heuristic for owner review, not proof of plagiarism or originality;
+shared conventions may flag, different DOM grouping may miss a similar layout.
+Exit: 0 no flags, 1 similarity flagged, 2 usage/load error or no measurable blocks.
+"""
+
+import html
+from visual_tools import FLAGS, context, load, parser, report, run
+
+PROBE = """() => {
+    let els = [...document.querySelectorAll('section,article,header,footer,nav,aside,h1,h2,img,video,canvas,svg,[data-ud-block]')];
+    const measure = elements => {
+        const seen = new Set();
+        return elements.flatMap(e => {
+            const r=e.getBoundingClientRect(), s=getComputedStyle(e);
+            if(r.width*r.height < innerWidth*innerHeight*.005 || s.visibility !== 'visible' || s.opacity === '0') return [];
+            const b=[r.left+scrollX,r.top+scrollY,r.right+scrollX,r.bottom+scrollY].map(n=>Math.round(n));
+            const key=b.join(',');
+            if(seen.has(key)) return [];
+            seen.add(key); return [b];
+        });
+    };
+    const blocks=measure(els);
+    return blocks.length ? blocks : measure([...(document.querySelector('main') || document.body).children]);
+}"""
+
+
+def similarity(a, b):
+    pairs = []
+    for i, x in enumerate(a):
+        for j, y in enumerate(b):
+            intersection = max(0, min(x[2], y[2])-max(x[0], y[0])) * max(0, min(x[3], y[3])-max(x[1], y[1]))
+            union = (x[2]-x[0])*(x[3]-x[1]) + (y[2]-y[0])*(y[3]-y[1]) - intersection
+            pairs.append((intersection / union, i, j))
+    used_a, used_b, total = set(), set(), 0
+    for score, i, j in sorted(pairs, reverse=True):
+        if i not in used_a and j not in used_b:
+            used_a.add(i)
+            used_b.add(j)
+            total += score
+    return total / max(len(a), len(b))
+
+
+def main():
+    p = parser(__doc__)
+    p.add_argument("--reference", action="append", required=True)
+    p.add_argument("--width", type=int, default=1440)
+    p.add_argument("--threshold", type=float, default=0.85)
+    args = p.parse_args()
+    if args.width <= 0 or not 0 <= args.threshold <= 1:
+        p.error("width must be positive; threshold must be between 0 and 1")
+    args.out.mkdir(parents=True, exist_ok=True)
+    from playwright.sync_api import sync_playwright
+    captures = []
+    source = args.url
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(executable_path=args.chromium_path, args=FLAGS)
+        for i, url in enumerate([source, *args.reference]):
+            args.url = url
+            ctx = context(browser, args, args.width)
+            page, errors = load(ctx, args)
+            blocks = page.evaluate(PROBE)
+            if not blocks:
+                raise ValueError(f"No measurable major blocks: {url}")
+            image = f"page-{i}.png"
+            page.screenshot(path=args.out / image, full_page=True)
+            captures.append({"url": url, "blocks": blocks, "screenshot": image, **errors})
+            ctx.close()
+        browser.close()
+    results = []
+    boards = []
+    for reference in captures[1:]:
+        score = similarity(captures[0]["blocks"], reference["blocks"])
+        results.append({**reference, "similarity": score, "pass": score <= args.threshold})
+        boards.append(f'<section><h2>{html.escape(reference["url"])}: {score:.3f}</h2>'
+                      f'<div><img alt="Render" src="page-0.png"><img alt="Reference" src="{reference["screenshot"]}"></div></section>')
+    (args.out / "index.html").write_text('<!doctype html><html lang="en"><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width"><title>Originality review</title>'
+        '<style>body{font:16px system-ui;margin:24px}section div{display:flex;gap:16px;align-items:start}img{width:49%}</style>'
+        '<h1>Block structure review</h1><p>Similarity is a lab heuristic, not a plagiarism verdict.</p>'
+        + "".join(boards) + "</html>", encoding="utf-8")
+    return report(args.out, "originality.json", {"width": args.width, "threshold": args.threshold,
+                  "render": captures[0], "references": results, "pass": all(r["pass"] for r in results)})
+
+
+if __name__ == "__main__":
+    run(main)

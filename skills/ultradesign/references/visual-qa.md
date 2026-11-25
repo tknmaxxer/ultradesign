@@ -1,6 +1,6 @@
 # Visual and interaction QA
 
-Run this on changed routes in a real render. Compare with the brief and reference intent, not pixel similarity to the source reference.
+Run this on changed routes in a real render. Compare with the brief, the approved direction and the animatic. A render must differ in layout from every picked reference; the originality check measures that, and the pixel similarity to a source is never a goal.
 
 | Check | How to verify |
 | --- | --- |
@@ -9,7 +9,10 @@ Run this on changed routes in a real render. Compare with the brief and referenc
 | Mobile constraints | Inspect viewport configuration on the web, and test safe-area insets for edge-to-edge content and fixed controls. Verify keyboard appearance, orientation changes, thumb reach, and whether zoom is preserved where relevant. Mark inset or ergonomics checks unverified if a desktop viewport cannot reproduce them. |
 | Real flows and states | Run the primary task through keyboard and touch or pointer as applicable. Check relevant loading, empty, error, disabled, and success states with realistic content and long strings. |
 | Accessibility | Check observable focus order and visibility, control names, headings, contrast, and whether state changes are understandable without color alone. Exercise overlays for keyboard dismissal and focus return where applicable. |
-| Motion | Trigger the interaction and replay it with reduced motion enabled. Feedback and completion must still be apparent, and animated elements must not hide or block controls. |
+| Motion | Trigger the interaction and replay it with reduced motion enabled. Feedback and completion must still be apparent, and animated elements must not hide or block controls. Then stress it as a user would: fast scroll, repeated clicks, back navigation, resize mid-animation, touch, keyboard. The shipped motion must match the approved animatic and spec. |
+| Visual share per section | Run `text-only-lint` against `composition.json` at 390 and 1440: each section's share of area covered by image, video, canvas, SVG and result fragments must match its declared `visualRole`. 0.00 means text only. |
+| Originality | Run `originality-check` against every picked reference at the same width. The score is a structural heuristic (default threshold 0.85), not a calibrated plagiarism verdict; a flagged match goes to the owner on a side-by-side board. |
+| Scene and performance | Run `scene-qa`: WebGL context, console and page errors, frame-rate sample, LCP with the scene loaded, reduced-motion still, WebGL-off fallback still. Frame rates here are lab numbers (headless or SwiftShader), not device numbers; field Core Web Vitals (p75) are a post-launch check. |
 | Landing metadata | If public sharing is in scope, inspect the served title, description, and Open Graph tags in addition to the visible page. |
 
 An interaction review is not the same as a visual critique. For deeper UX review, use a concrete audience, task, and device for each scenario; note what blocks completion before ranking cosmetic issues. For example, on a phone held in one hand, try to reach the primary control, complete the task with the keyboard open, and recover from an invalid input.

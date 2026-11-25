@@ -155,16 +155,18 @@ class A2uiTools(unittest.TestCase):
             self.assertIn(message, findings)
 
     def test_screen_map_board(self):
-        crop = self.root / "crop.png"
-        crop.write_bytes(bytes.fromhex("89504e470d0a1a0a"))
-        table = {**TABLE, "order": 2, "title": "Handoff", "reference": {"url": "https://example.test/ref", "crop": "crop.png"}, "motion": "None"}
+        table = {**TABLE, "id": "handoff", "order": 2, "title": "Handoff",
+                 "asset": "handoff-preview", "motion": "None", "visualRole": "product-ui",
+                 "states": ["normal", "failure"], "responsive": "Stack below 768px",
+                 "principles": ["Lead with the next action"]}
         board = self.root / "map" / "index.html"
-        self.run_cli("screen-map", self.write("handoff.json", table), "--out", board)
+        self.run_cli("screen-map", self.write("handoff.json", {"page": "product", "sections": [table]}), "--out", board)
         text = board.read_text()
         self.assertIn("P1", text)
         self.assertIn("Recheck", json.dumps(SCREEN))
-        self.assertIn('src="map-assets/01.png"', text)
-        self.assertTrue((board.parent / "map-assets" / "01.png").is_file())
+        self.assertIn("handoff-preview", text)
+        self.assertIn("Stack below 768px", text)
+        self.assertTrue((board.parent / "composition.json").is_file())
 
     def test_hierarchy_check_on_render(self):
         table = self.write("hierarchy.json", TABLE)
