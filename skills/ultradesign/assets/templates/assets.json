@@ -1,0 +1,14 @@
+{
+  "assets": [
+    {
+      "id": "unique id used by the composition map, for example hero-key-visual",
+      "file": "path of the asset in the project, for example public/assets/hero-key-visual.webp",
+      "kind": "image | video | illustration | 3d | lottie | svg | font | texture",
+      "source": "generated | owner-supplied | licensed-stock | own-capture, with the URL or path of the origin",
+      "prompt": "generated assets: the exact prompt and any input asset ids; otherwise null",
+      "model": "generated assets: the model that produced it; otherwise null",
+      "licence": "licence or usage right, with the document or URL that grants it",
+      "createdAt": "ISO 8601 UTC timestamp, for example 2026-11-24T23:18:58Z"
+    }
+  ]
+}

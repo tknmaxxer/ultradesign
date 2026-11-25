@@ -1,0 +1,52 @@
+.ud-specimen, .ud-action, .ud-motion, .ud-imagery {
+  color: var(--color-text);
+  font-family: var(--type-body-font-family);
+  font-size: var(--type-body-font-size);
+  line-height: var(--type-body-line-height);
+}
+.ud-specimen { padding: var(--space-medium); background: var(--color-canvas); }
+.ud-action { max-width: 32rem; }
+.ud-button {
+  padding: var(--space-small) var(--space-medium);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--color-action);
+  color: var(--color-on-action);
+  font: inherit;
+  cursor: pointer;
+  transition: opacity var(--motion-duration-quick) var(--motion-easing-productive-standard);
+}
+.ud-button:hover:not(:disabled), .ud-button[data-hovered="true"]:not(:disabled) { opacity: 0.85; }
+.ud-button:focus-visible { outline: medium solid var(--color-text); outline-offset: 0.2em; }
+.ud-button:disabled { opacity: 0.6; cursor: not-allowed; }
+.ud-action [role="alert"] { color: var(--color-error); }
+.ud-action [role="status"] { min-height: 1.5em; }
+.ud-swatch { display: inline-block; width: 3rem; height: 2rem; border: thin solid var(--color-muted); }
+.ud-token-table { max-width: 100%; overflow-x: auto; }
+.ud-token-table:focus-visible { outline: medium solid var(--color-action); outline-offset: 0.2em; }
+.ud-imagery { display: flex; flex-wrap: wrap; gap: var(--space-medium); }
+.ud-imagery figure { margin: 0; max-width: 100%; }
+.ud-image { display: block; max-width: 100%; }
+.ud-image-wide { width: 32rem; aspect-ratio: 16 / 9; }
+.ud-image-narrow { width: 12rem; aspect-ratio: 3 / 4; }
+.ud-image-sky { fill: var(--color-canvas); }
+.ud-image-subject { fill: var(--color-action); }
+.ud-image-hill { fill: var(--color-muted); }
+.ud-motion label { display: block; margin-bottom: var(--space-small); }
+.ud-motion-track { padding: var(--space-large); overflow: hidden; }
+.ud-motion-subject {
+  padding: var(--space-medium);
+  background: var(--color-action);
+  color: var(--color-on-action);
+  animation: ud-entrance var(--motion-duration-medium) var(--motion-easing-productive-entrance) both;
+}
+@keyframes ud-entrance {
+  from { transform: translateY(1rem); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+[data-reduced-motion="reduce"] .ud-motion-subject { animation: none; }
+[data-reduced-motion="reduce"] .ud-button { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .ud-motion-subject { animation: none; }
+  .ud-button { transition: none; }
+}

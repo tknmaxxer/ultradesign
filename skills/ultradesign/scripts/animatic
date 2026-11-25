@@ -1,0 +1,90 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["playwright==1.65.1"]
+# ///
+"""Record a framework-neutral page-owned animation.
+
+Input: --url exposing window.udAnimatic = {duration: seconds,
+play(): Promise<void>, settle(): void}, --widths (1440,390), --out.
+Outputs per width: animatic-W.mp4, strip-W.png, end-W.png, reduced-W.png;
+animatic.json records declared duration, errors, artifacts and WebGL.
+Method: Playwright video, await play's completion promise with a bounded
+timeout, settle and capture; ffmpeg encodes MP4 and six evenly sampled frames.
+Reduced motion runs play under prefers-reduced-motion before settle.
+Limits: video includes browser startup/loading, so recorded duration can exceed
+the declared timeline. SwiftShader results are lab evidence, never device FPS.
+No audio is captured. Same-origin resources only.
+Exit: 0 clean recording, 1 page/console errors, 2 usage/load/ffmpeg error.
+"""
+
+import shutil
+import subprocess
+import tempfile
+from visual_tools import FLAGS, animatic_ready, bounded, context, load, parser, report, run, webgl, widths
+
+
+def encode(*args):
+    result = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *map(str, args)],
+                            capture_output=True, text=True, timeout=120)
+    if result.returncode:
+        raise ValueError(f"ffmpeg failed: {result.stderr.strip()}")
+
+
+def play(page, timeout):
+    bounded(page, """() => {
+        const result = udAnimatic.play();
+        if (!result || typeof result.then !== 'function') throw new Error('udAnimatic.play() must return a Promise');
+        return result;
+    }""", timeout)
+    bounded(page, "() => udAnimatic.settle()", timeout)
+
+
+def main():
+    p = parser(__doc__)
+    p.add_argument("--widths", type=widths, default=[1440, 390])
+    args = p.parse_args()
+    if not shutil.which("ffmpeg"):
+        raise ValueError("ffmpeg is required for animatic; install ffmpeg and put it on PATH")
+    args.out.mkdir(parents=True, exist_ok=True)
+    from playwright.sync_api import sync_playwright
+    rows = []
+    with sync_playwright() as pw, tempfile.TemporaryDirectory(prefix="ud-animatic-") as temp:
+        browser = pw.chromium.launch(executable_path=args.chromium_path, args=FLAGS)
+        for width in args.widths:
+            height = 844 if width < 600 else 900
+            ctx = context(browser, args, width, record_video_dir=temp,
+                          record_video_size={"width": width, "height": height})
+            page, errors = load(ctx, args)
+            duration = animatic_ready(page, args.timeout)
+            play(page, max(args.timeout, (duration + 5) * 1000))
+            still, movie, strip = f"end-{width}.png", f"animatic-{width}.mp4", f"strip-{width}.png"
+            page.screenshot(path=args.out / still, full_page=True)
+            gl = webgl(page)
+            video = page.video
+            ctx.close()
+            video_path = video.path()
+            encode("-i", video_path, "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2",
+                   "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", args.out / movie)
+            # Six samples at the timeline-derived interval; pad very short recordings.
+            encode("-i", args.out / movie, "-vf",
+                   f"fps={6 / duration},scale=320:-1,tpad=stop_mode=clone:stop_duration={duration},tile=6x1:padding=4",
+                   "-frames:v", "1", args.out / strip)
+            reduced = f"reduced-{width}.png"
+            reduced_ctx = context(browser, args, width, reduced_motion="reduce")
+            reduced_page, reduced_errors = load(reduced_ctx, args)
+            animatic_ready(reduced_page, args.timeout)
+            play(reduced_page, max(args.timeout, (duration + 5) * 1000))
+            reduced_page.screenshot(path=args.out / reduced, full_page=True)
+            reduced_ctx.close()
+            rows.append({"width": width, "duration": duration, "webgl": gl,
+                         "video": movie, "strip": strip, "endState": still, "reducedMotion": reduced,
+                         **errors, "reducedErrors": reduced_errors,
+                         "pass": not any(errors.values()) and not any(reduced_errors.values())})
+        browser.close()
+    return report(args.out, "animatic.json", {"url": args.url, "environment": "lab (SwiftShader)",
+                  "viewports": rows, "pass": all(r["pass"] for r in rows)})
+
+
+if __name__ == "__main__":
+    run(main)

@@ -1,0 +1,80 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = []
+# ///
+"""Run an already-installed Google Labs @google/design.md alpha linter.
+
+No npx, package installation, shell expansion, or mutation. Exit 0: policy
+passed; 1: findings fail policy; 2: unavailable/configuration/execution error.
+Nested semantic groups and motion are Ultradesign extensions, not an upstream
+alpha schema guarantee. Upstream findings remain intact; none are filtered.
+"""
+
+import argparse
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+
+
+def executable(configured, design):
+    if configured:
+        found = shutil.which(configured)
+        if found:
+            return found
+        raise ValueError(f"Configured executable is unavailable: {configured}")
+    # Resolve only existing local project tools, then PATH. Never install.
+    for directory in (design.resolve().parent, *design.resolve().parent.parents):
+        for name in ("designmd", "design.md"):
+            candidate = directory / "node_modules" / ".bin" / name
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return str(candidate)
+    for name in ("designmd", "design.md"):
+        found = shutil.which(name)
+        if found:
+            return found
+    raise ValueError("Google Labs @google/design.md is not installed. Install it explicitly with your project's lockfile-selected package manager, then use --executable /path/to/node_modules/.bin/designmd (or DESIGN_LINT_EXECUTABLE). No install was attempted.")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("design", type=Path)
+    parser.add_argument("--executable", default=os.environ.get("DESIGN_LINT_EXECUTABLE"), help="Local Google Labs designmd executable, not a shell command.")
+    parser.add_argument("--fail-on", choices=("error", "warning"), default="error", help="warning fails on warnings or errors; error is the upstream default.")
+    args = parser.parse_args()
+    try:
+        if not args.design.is_file():
+            raise ValueError(f"Design file does not exist: {args.design}")
+        command = executable(args.executable, args.design)
+        result = subprocess.run([command, "lint", "--format", "json", str(args.design.resolve())], capture_output=True, text=True)
+        if result.stderr:
+            print(result.stderr, end="", file=sys.stderr)
+        if result.returncode not in (0, 1):
+            raise ValueError(f"Upstream exited {result.returncode}: {result.stdout.strip()}")
+        report = json.loads(result.stdout)
+        if not isinstance(report, dict) or not isinstance(report.get("findings"), list) or not isinstance(report.get("summary"), dict):
+            raise ValueError("Upstream did not return the documented findings/summary JSON report.")
+        summary = report["summary"]
+        if any(type(summary.get(key)) is not int or summary[key] < 0 for key in ("errors", "warnings", "infos")):
+            raise ValueError("Upstream summary must contain nonnegative integer errors, warnings and infos.")
+        failed = summary["errors"] > 0 or args.fail_on == "warning" and summary["warnings"] > 0
+        if result.returncode == 1 and not failed:
+            raise ValueError("Upstream exited 1 without findings matching the selected policy; refusing to report success.")
+        report["ultradesign"] = {
+            "upstream": "@google/design.md (alpha; installed version)",
+            "executable": command, "failOn": args.fail_on, "upstreamExit": result.returncode,
+            "policyPassed": not failed,
+            "scope": "Upstream report is unfiltered. Nested semantic groups/motion are local extensions; use design-tokens for their alias/CSS boundary.",
+        }
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 1 if failed else 0
+    except (OSError, ValueError, UnicodeError) as error:
+        print(f"design-lint: {error}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

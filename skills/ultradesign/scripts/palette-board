@@ -1,0 +1,152 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = []
+# ///
+"""Build an offline, numbered palette board from observed JSON; never scrape.
+
+Input: [{src: "source label", colors: ["#aabbcc", ...], url?: "https://..."}]
+or {palettes: [...]}. Optional source/sourceUrl/title/observedAt are preserved.
+Collect only colors visible on public or explicitly authorized pages, using
+normal page controls or an allowed export. Record the page URL and observation
+time; do not log in automatically, bypass access rules, or extract profiles.
+When historical input has only src, the board links its original JSON record
+and explicitly says the page URL was not recorded. It never invents one.
+"""
+
+import argparse
+import hashlib
+from html import escape
+import json
+import os
+from pathlib import Path
+import re
+import sys
+from urllib.parse import quote, urlsplit
+
+
+def color(value):
+    if not isinstance(value, str) or not re.fullmatch(r"#[0-9a-fA-F]{3,4}|#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?", value):
+        raise ValueError(f"Expected a hex swatch (#RGB/#RGBA/#RRGGBB/#RRGGBBAA), got {value!r}")
+    value = value[1:].upper()
+    if len(value) in (3, 4):
+        value = "".join(c * 2 for c in value)
+    return "#" + value
+
+
+def source_url(value):
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError("Source URL must be a string.")
+    parsed = urlsplit(value)
+    if parsed.scheme not in ("https", "http") or not parsed.hostname or parsed.username or parsed.password:
+        raise ValueError(f"Source URL must be an http(s) page without credentials: {value!r}")
+    return value
+
+
+def normalize(document, record_link):
+    rows = document.get("palettes") if isinstance(document, dict) else document
+    if not isinstance(rows, list) or not rows:
+        raise ValueError("Input must be a nonempty palette array or {palettes: [...]}.")
+    unique = {}
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict) or not isinstance(row.get("colors"), list) or not row["colors"]:
+            raise ValueError(f"Palette {index + 1} must have a nonempty colors array.")
+        colors = tuple(color(value) for value in row["colors"])
+        src = row.get("source", row.get("src", "Observed palette"))
+        metadata = src if isinstance(src, dict) else {}
+        label = metadata.get("name", metadata.get("label", "Observed palette")) if metadata else src
+        if not isinstance(label, str) or not label.strip():
+            raise ValueError(f"Palette {index + 1} source label must be a nonempty string.")
+        url = source_url(row.get("url", row.get("sourceUrl", row.get("source_url", metadata.get("url")))))
+        if url is None and re.match(r"^https?://", label):
+            url = source_url(label)
+        provenance = {
+            "label": label,
+            "url": url,
+            "record": f"{record_link}#/{'palettes/' if isinstance(document, dict) else ''}{index}",
+            "inputIndex": index,
+            "observedAt": row.get("observedAt", row.get("observed_at")),
+            "title": row.get("title", row.get("name")),
+        }
+        if any(value is not None and not isinstance(value, str) for key, value in provenance.items() if key in ("observedAt", "title")):
+            raise ValueError(f"Palette {index + 1} title and observation time must be strings.")
+        if colors not in unique:
+            unique[colors] = {
+                "id": "palette-" + hashlib.sha256("|".join(colors).encode()).hexdigest()[:12],
+                "number": len(unique) + 1, "colors": list(colors), "sources": [],
+            }
+        unique[colors]["sources"].append(provenance)
+    return list(unique.values())
+
+
+def render(palettes, input_name):
+    cards = []
+    for palette in palettes:
+        swatches = "".join(
+            f'<li><div class="swatch" style="background-color:{value}" aria-hidden="true"></div><code>{value}</code></li>'
+            for value in palette["colors"]
+        )
+        sources = []
+        for src in palette["sources"]:
+            link = src["url"] or src["record"]
+            note = "" if src["url"] else " (page URL not recorded; original JSON)"
+            observed = f' <time>{escape(src["observedAt"])}</time>' if src["observedAt"] else ""
+            sources.append(
+                f'<li><a href="{escape(link, quote=True)}" rel="noreferrer">{escape(src["label"])}</a>{note}{observed}'
+                f' <a href="{escape(src["record"], quote=True)}" aria-label="Original input record {src["inputIndex"] + 1}">Input {src["inputIndex"] + 1}</a></li>'
+            )
+        cards.append(
+            f'<article id="{palette["id"]}" data-palette-id="{palette["id"]}" aria-labelledby="{palette["id"]}-heading">'
+            f'<h2 id="{palette["id"]}-heading"><a href="#{palette["id"]}">#{palette["number"]}</a></h2>'
+            f'<ul class="swatches">{swatches}</ul><ul class="sources">{"".join(sources)}</ul>'
+            f'<p class="id"><code>{palette["id"]}</code></p></article>'
+        )
+    manifest = json.dumps({"schemaVersion": 1, "input": input_name, "palettes": palettes}, ensure_ascii=False, indent=2)
+    # An application/json script is data, never executable; escape its HTML boundary.
+    manifest = manifest.replace("&", "\\u0026").replace("<", "\\u003c").replace(">", "\\u003e")
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Observed palette board</title><style>
+*{{box-sizing:border-box}}body{{margin:0;background:white;color:#171717;font:1rem/1.5 system-ui,sans-serif}}
+main{{max-width:100rem;margin:auto;padding:clamp(1rem,3vw,3rem)}}h1{{margin:0;font-size:2rem}}header p{{max-width:75ch}}
+a{{color:inherit;text-underline-offset:.2em}}a:focus-visible{{outline:3px solid currentColor;outline-offset:4px}}
+.board{{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,20rem),1fr));gap:1.5rem}}
+article{{border:1px solid #b7b7b7;padding:1rem;min-width:0}}h2{{margin:0 0 .75rem;font-size:1.25rem}}
+ul{{list-style:none;padding:0;margin:0}}.swatches{{display:flex}}.swatches li{{flex:1;min-width:0;text-align:center}}
+.swatch{{height:5rem;border:1px solid #999}}code{{font-size:.75rem;overflow-wrap:anywhere}}
+.sources{{margin-top:1rem;font-size:.875rem}}.sources li+li{{margin-top:.5rem}}time{{display:block}}
+.id{{margin-bottom:0;color:#4c4c4c}}@media(max-width:480px){{.swatches{{flex-wrap:wrap}}.swatches li{{flex:1 0 25%}}}}
+</style></head><body><main><header><h1>Observed palette board</h1>
+<p>{len(palettes)} distinct palettes from <code>{escape(input_name)}</code>. Refer to a number and stable ID when choosing.
+Swatches are observed values, not a contrast-approved semantic system. Repeated ordered palettes are merged with all provenance;
+reordered palettes remain separate. No network requests were made.</p></header>
+<div class="board">{"".join(cards)}</div>
+<script type="application/json" id="palette-manifest">{manifest}</script></main></body></html>
+"""
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--input", type=Path, required=True)
+    parser.add_argument("--out", type=Path, required=True)
+    args = parser.parse_args()
+    try:
+        if args.input.resolve() == args.out.resolve():
+            raise ValueError("Input JSON and board output must be distinct.")
+        document = json.loads(args.input.read_text(encoding="utf-8"))
+        record_link = quote(os.path.relpath(args.input.resolve(), args.out.resolve().parent), safe="/")
+        palettes = normalize(document, record_link)
+        content = render(palettes, args.input.name)
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(content, encoding="utf-8")
+        print(f"{len(palettes)} distinct observed palettes -> {args.out}")
+        return 0
+    except (OSError, ValueError, UnicodeError) as error:
+        print(f"palette-board: {error}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

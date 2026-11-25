@@ -1,0 +1,10 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = []
+# ///
+"""Source-checkout front door; the copied skill owns the implementation."""
+from pathlib import Path
+import runpy
+
+runpy.run_path(str(Path(__file__).resolve().parents[1] / "skills/ultradesign/scripts/design-lint"), run_name="__main__")

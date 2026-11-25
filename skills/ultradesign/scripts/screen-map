@@ -1,0 +1,106 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = []
+# ///
+"""Render an offline composition-map board with optional hierarchy tables.
+
+Input: positional composition.json files with page and sections; each section
+has id, order, title, asset, motion, visualRole, states, responsive, principles.
+Existing hierarchy fields (items, primaryAction, task, frame) are optional.
+Output: --out HTML and composition.json beside it. Values are displayed as
+escaped text; asset identifiers are declarations, not fetched media.
+Method: sections ordered by order. No reference.crop support or network.
+Limits: this reviews intent, not the rendered page or asset existence.
+Exit: 0 generated, 2 usage/load error (no scored checks).
+"""
+
+import argparse
+import html
+import json
+from pathlib import Path
+from visual_tools import run
+
+STYLE = """
+body{margin:0;font:15px/1.5 system-ui,sans-serif;color:#1d1d1f;background:#fafafa}
+main{max-width:1200px;margin:0 auto;padding:32px 24px 64px}
+h1{font-size:22px;margin:0 0 4px}p.lead{margin:0 0 32px;color:#555}
+section{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:24px;padding:24px 0;border-top:1px solid #ddd}
+section h2{font-size:18px;margin:0 0 8px}section h2 span{color:#888;font-weight:400;margin-right:8px}
+img{width:100%;height:auto;border:1px solid #e5e5e5}
+table{width:100%;border-collapse:collapse}td,th{text-align:left;vertical-align:top;padding:6px 8px;border-bottom:1px solid #eee}
+th{font-weight:600;color:#555;font-size:13px}td.p{white-space:nowrap;font-weight:600}
+dl{margin:12px 0 0;display:grid;grid-template-columns:max-content 1fr;gap:4px 12px}dt{color:#777}dd{margin:0}
+@media (max-width:760px){section{grid-template-columns:1fr}}
+"""
+
+
+def load(path):
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"cannot read {path}: {error}") from None
+
+
+def section(number, table):
+    e = html.escape
+    rank = {1: "P1", 2: "P2", 3: "P3", "action": "Action"}
+    rows = "".join(
+        f'<tr><td class="p">{rank.get(item.get("priority"), "?")}{" · primary" if item.get("id") == table.get("primaryAction") else ""}</td>'
+        f'<td>{e(str(item.get("says", "")))}</td><td>{e(str(item.get("id", "")))}</td><td>{e(str(item.get("words", "")))}</td></tr>'
+        for item in sorted(table.get("items", []), key=lambda i: (4 if i.get("priority") == "action" else i.get("priority", 5))))
+    details = "".join(f"<dt>{e(label)}</dt><dd>{e(str(table[key]))}</dd>"
+                      for key, label in (("task", "Task"), ("frame", "Layout frame"), ("asset", "Asset"),
+                                         ("motion", "Motion"), ("visualRole", "Visual role"), ("states", "States"),
+                                         ("responsive", "Responsive rules"), ("principles", "Principles"),
+                                         ("ownerException", "Owner exception"))
+                      if key in table)
+    return (f'<section id="s{number}"><div><dl>{details}</dl></div><div>'
+            f'<h2><span>{number}</span>{e(str(table.get("title") or table.get("screen") or ""))}</h2>'
+            f'<table><tr><th>Priority</th><th>What it says</th><th>Component ID</th><th>Max words</th></tr>{rows}</table>'
+            '</div></section>')
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("tables", nargs="+", help="composition.json files")
+    parser.add_argument("--out", type=Path, required=True, help="board HTML path")
+    parser.add_argument("--title", default="Composition map")
+    args = parser.parse_args()
+    loaded = []
+    maps = []
+    for path in args.tables:
+        data = load(path)
+        if data.get("page") not in {"expressive", "reading", "product"} or not isinstance(data.get("sections"), list) or not data["sections"]:
+            raise ValueError("composition map requires page and nonempty sections")
+        ids = set()
+        for table in data["sections"]:
+            required = {"id", "order", "title", "asset", "motion", "visualRole", "states", "responsive", "principles"}
+            if not isinstance(table, dict) or not required.issubset(table):
+                raise ValueError("section missing composition fields")
+            if not isinstance(table["id"], str) or not table["id"] or table["id"] in ids:
+                raise ValueError("section ids must be unique nonempty strings")
+            if table["visualRole"] not in {"image", "scene", "product-ui", "illustration", "data", "typographic"}:
+                raise ValueError("invalid visualRole")
+            if not isinstance(table["states"], list) or not isinstance(table["principles"], list):
+                raise ValueError("states and principles must be lists")
+            if isinstance(table.get("reference"), dict) and "crop" in table["reference"]:
+                raise ValueError("reference.crop was removed; declare asset and principles")
+            ids.add(table["id"])
+            loaded.append((table, path))
+        maps.append(data)
+    loaded.sort(key=lambda pair: (pair[0].get("order", 1e9), args.tables.index(pair[1])))
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    sections = "".join(section(number, table) for number, (table, path) in enumerate(loaded, 1))
+    args.out.write_text(
+        f'<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+        f"<title>{html.escape(args.title)}</title><style>{STYLE}</style><main><h1>{html.escape(args.title)}</h1>"
+        '<p class="lead">Tell the page story from top to bottom. Where should its order or visual role change?</p>'
+        f"{sections}</main></html>\n", encoding="utf-8")
+    (args.out.parent / "composition.json").write_text(json.dumps(maps[0] if len(maps) == 1 else maps, indent=2) + "\n", encoding="utf-8")
+    print(f"Wrote {len(loaded)} section(s) to {args.out}")
+    return 0
+
+
+if __name__ == "__main__":
+    run(main)

@@ -1,0 +1,422 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["jsonschema==4.23.0", "jsonschema-specifications==2024.10.1", "referencing==0.35.1", "rfc3339-validator==0.1.4"]
+# ///
+"""Validate an Ultradesign A2UI v1.0 catalog and screen before rendering.
+
+Checks, in order: the catalog against the A2UI catalog definition and the
+Ultradesign catalog conventions; the screen message against the A2UI envelope
+and that catalog; the identifier rule the official renderers enforce (UAX #31,
+which the JSON schema alone does not); tree structure; data bindings; and, with
+--hierarchy, the owner-approved hierarchy table (one P1, emphasis per item, one
+primary action, layout frame and copy budgets).
+
+Exit codes: 0 valid, 1 findings, 2 unreadable input or usage error.
+"""
+
+import argparse
+import copy
+import json
+from pathlib import Path
+import re
+import sys
+
+from jsonschema import Draft202012Validator, FormatChecker
+from jsonschema.exceptions import best_match
+from jsonschema_specifications import REGISTRY as SPECIFICATIONS
+from referencing import Resource
+from referencing.jsonschema import DRAFT202012
+
+SPEC = Path(__file__).resolve().parent.parent / "assets" / "a2ui" / "v1_0"
+SPEC_BASE = "https://a2ui.org/specification/v1_0/"
+XID_PATTERN = "^[\\p{XID_Start}_][\\p{XID_Continue}]*$"
+ROLES = {"frame", "content", "action"}
+EMPHASIS = {"content": ["p1", "p2", "p3"], "action": ["primary", "secondary"]}
+STYLE_PROPS = {
+    "color", "background", "backgroundcolor", "fill", "stroke", "size", "fontsize", "font", "fontfamily",
+    "fontweight", "width", "height", "padding", "margin", "gap", "radius", "style", "classname", "class",
+    "css", "html", "innerhtml", "markup", "variant", "tone", "theme",
+}
+PATH_AS_TEXT = re.compile(r"^@?/[^\s]*$|^\{\s*\"?@?path")
+FORMATS = FormatChecker()
+WORD = re.compile(r"[^\W_]+(?:['’.\-][^\W_]+)*")
+
+
+class Findings(list):
+    def add(self, kind, where, message):
+        self.append({"kind": kind, "where": where, "message": message})
+
+
+def load(path):
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise SystemExit(f"error: cannot read {path}: {error}") from None
+
+
+def python_patterns(schema):
+    """The spec's XID property pattern needs Unicode properties Python's re lacks; identifiers are checked separately."""
+    if isinstance(schema, dict):
+        return {(".*" if key == XID_PATTERN else key): python_patterns(value) for key, value in schema.items()}
+    if isinstance(schema, list):
+        return [python_patterns(item) for item in schema]
+    return schema
+
+
+def identifier(name):
+    # Python's str.isidentifier() is XID_Start/_ then XID_Continue: the same set the A2UI renderers accept.
+    return isinstance(name, str) and name.isidentifier()
+
+
+def registry_for(catalog):
+    spec = {name: python_patterns(load(SPEC / f"{name}.json")) for name in ("common_types", "catalog_definition", "agent_to_renderer")}
+    catalog_id = catalog.get("$id") or catalog.get("catalogId") or "urn:ud:catalog"
+    catalog_base = catalog_id.rsplit("/", 1)[0] + "/"
+    pairs = [
+        (SPEC_BASE + "common_types.json", spec["common_types"]),
+        (catalog_base + "common_types.json", spec["common_types"]),
+        (SPEC_BASE + "catalog_definition.json", spec["catalog_definition"]),
+        (SPEC_BASE + "agent_to_renderer.json", spec["agent_to_renderer"]),
+        (SPEC_BASE + "catalog.json", python_patterns(catalog)),
+        (catalog_id, python_patterns(catalog)),
+    ]
+    # Start from the bundled JSON Schema meta-schemas, which catalog_definition.json references.
+    registry = SPECIFICATIONS.with_resources(
+        (uri, Resource(contents=contents, specification=DRAFT202012)) for uri, contents in pairs)
+    return registry, spec
+
+
+def schema_errors(schema, instance, registry, kind, where, findings):
+    # Formats (for example date-time) are assertions here: catalogs declare the rules their renderer enforces.
+    validator = Draft202012Validator(schema, registry=registry, format_checker=FORMATS)
+    for error in sorted(validator.iter_errors(instance), key=lambda e: list(e.absolute_path)):
+        while error.context:  # oneOf/anyOf: report the branch that came closest, not the whole instance
+            if error.validator in {"oneOf", "anyOf"} and not isinstance(error.instance, str) \
+                    and "DataBinding" in json.dumps(error.validator_value):
+                error.message = f"{json.dumps(error.instance, ensure_ascii=False)[:120]} is neither text nor a binding {{\"@path\": \"/pointer\"}}"
+                break
+            formats = [e for e in error.context if e.validator == "format"]
+            error = formats[0] if formats else best_match(error.context)
+        path = "/".join(str(part) for part in error.absolute_path)
+        findings.add(kind, f"{where}{'/' + path if path else ''}", error.message[:300])
+
+
+def resolve_local(schema, root):
+    while isinstance(schema, dict) and isinstance(schema.get("$ref"), str) and schema["$ref"].startswith("#/"):
+        node = root
+        for part in schema["$ref"][2:].split("/"):
+            node = node.get(part, {}) if isinstance(node, dict) else {}
+        schema = node
+    return schema
+
+
+def refs_in(schema):
+    found = []
+    if isinstance(schema, dict):
+        for key, value in schema.items():
+            if key == "$ref" and isinstance(value, str):
+                found.append(value)
+            else:
+                found.extend(refs_in(value))
+    elif isinstance(schema, list):
+        for item in schema:
+            found.extend(refs_in(item))
+    return found
+
+
+def role_of(definition):
+    return (((definition.get("metadata") or {}).get("extensions") or {}).get("ud_role"))
+
+
+def check_catalog(catalog, registry, spec, findings):
+    schema_errors(spec["catalog_definition"], python_patterns(catalog), registry, "catalog-schema", "catalog", findings)
+    components = catalog.get("components") or {}
+    if not components:
+        findings.add("catalog", "catalog/components", "Declare at least one component.")
+    for name, definition in components.items():
+        where = f"catalog/components/{name}"
+        if not identifier(name):
+            findings.add("identifier", where, f"Component name {name!r} is not a UAX #31 identifier.")
+        extensions = ((definition.get("metadata") or {}).get("extensions") or {})
+        for key in extensions:
+            if not identifier(key):
+                findings.add("identifier", f"{where}/metadata/extensions", f"Extension key {key!r} is not a UAX #31 identifier.")
+        role = role_of(definition)
+        if role not in ROLES:
+            findings.add("catalog", where, "Declare metadata.extensions.ud_role as frame, content or action.")
+        properties = definition.get("properties") or {}
+        for prop, prop_schema in properties.items():
+            if prop != "component" and not identifier(prop):
+                findings.add("identifier", f"{where}/properties", f"Property {prop!r} is not a UAX #31 identifier.")
+            if prop.lower() in STYLE_PROPS:
+                findings.add("catalog", f"{where}/properties/{prop}", "Style lives in the renderer; expose an emphasis role or an enum of approved options instead.")
+            if prop.lower() in {"href", "url", "src", "link"} and "enum" not in resolve_local(prop_schema, catalog):
+                findings.add("catalog", f"{where}/properties/{prop}", "Links and media take an enum of approved targets, not free text.")
+        emphasis = resolve_local(properties.get("emphasis"), catalog) if "emphasis" in properties else None
+        if role in EMPHASIS:
+            if not isinstance(emphasis, dict) or sorted(emphasis.get("enum") or []) != sorted(EMPHASIS[role]) \
+                    or "emphasis" not in (definition.get("required") or []):
+                findings.add("catalog", where, f"A {role} component requires emphasis with exactly {EMPHASIS[role]}.")
+        elif role == "frame":
+            if emphasis is not None:
+                findings.add("catalog", where, "A frame has a layout, not an emphasis.")
+            layout = resolve_local(properties.get("layout"), catalog)
+            if not isinstance(layout, dict) or not layout.get("enum"):
+                findings.add("catalog", where, "A frame exposes its approved layouts as a layout enum.")
+            if not any("ChildList" in ref or "ComponentId" in ref for ref in refs_in(properties)):
+                findings.add("catalog", where, "Type child references with common_types ChildList or ComponentId so the tree can be walked.")
+    for name in catalog.get("functions") or {}:
+        if not identifier(name):
+            findings.add("identifier", f"catalog/functions/{name}", f"Function name {name!r} is not a UAX #31 identifier.")
+
+
+def child_ids(value):
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, str)]
+    if isinstance(value, dict) and isinstance(value.get("componentId"), str):
+        return [value["componentId"]]
+    return []
+
+
+def pointer(data, path):
+    if not isinstance(path, str) or not path.startswith("/"):
+        raise KeyError(f"{path!r} is not an absolute JSON pointer")
+    node = data
+    for raw in path[1:].split("/"):
+        key = raw.replace("~1", "/").replace("~0", "~")
+        if isinstance(node, dict) and key in node:
+            node = node[key]
+        elif isinstance(node, list) and key.isdigit() and int(key) < len(node):
+            node = node[int(key)]
+        else:
+            raise KeyError(f"missing binding {path}")
+    return node
+
+
+def value_options(schema, root):
+    """The non-binding branches of a BoundText-style property: [(type, format)]."""
+    schema = resolve_local(schema, root)
+    options = (schema or {}).get("oneOf") or (schema or {}).get("anyOf") or []
+    found = []
+    for option in options:
+        option = resolve_local(option, root)
+        if isinstance(option, dict) and isinstance(option.get("type"), str):
+            found.append((option["type"], option.get("format")))
+    return found
+
+
+TYPE_CHECK = {"string": str, "boolean": bool, "number": (int, float), "integer": int, "array": list, "object": dict}
+
+
+def visible_text(component, definition, data, catalog):
+    words = 0
+    for prop, prop_schema in (definition.get("properties") or {}).items():
+        if prop in {"component", "emphasis", "layout", "action"} or prop not in component:
+            continue
+        resolved = resolve_local(prop_schema, catalog)
+        if isinstance(resolved, dict) and "enum" in resolved:
+            continue
+        value = component[prop]
+        if isinstance(value, dict) and "@path" in value:
+            try:
+                value = pointer(data, value["@path"])
+            except KeyError:
+                continue
+        if isinstance(value, str):
+            words += len(WORD.findall(value))
+        elif isinstance(value, list) and all(isinstance(item, str) for item in value) and not any(
+                "ChildList" in ref or "ComponentId" in ref for ref in refs_in(prop_schema)):
+            words += sum(len(WORD.findall(item)) for item in value)
+    return words
+
+
+def check_screen(screen, catalog, registry, spec, findings):
+    surface = screen.get("createSurface") if isinstance(screen, dict) else None
+    if not isinstance(surface, dict):
+        findings.add("screen", "screen", "Supply one createSurface message.")
+        return None
+    # Envelope first without the component list, then each component against its own definition,
+    # so a bad prop is reported on that component instead of as a mismatch of the whole oneOf.
+    envelope = {**screen, "createSurface": {**surface, "components": [{"id": "root", "component": "_"}]}}
+    envelope_schema = {"$ref": SPEC_BASE + "agent_to_renderer.json#/$defs/CreateSurfaceMessage"}
+    validator = Draft202012Validator(envelope_schema, registry=registry)
+    for error in validator.iter_errors(envelope):
+        if "components" not in error.absolute_path:
+            findings.add("screen-schema", "screen/" + "/".join(map(str, error.absolute_path)), error.message[:300])
+    catalog_uri = catalog.get("$id") or catalog.get("catalogId") or "urn:ud:catalog"
+    components_list = surface.get("components")
+    if not isinstance(components_list, list) or not components_list:
+        findings.add("screen-schema", "screen/createSurface/components", "Supply the component list inline.")
+        components_list = []
+    for index, component in enumerate(components_list):
+        name = component.get("component") if isinstance(component, dict) else None
+        if name not in (catalog.get("components") or {}):
+            findings.add("screen-schema", f"screen/components/{index}", f"Unknown component {name!r}; use only the approved catalog.")
+            continue
+        # unevaluatedProperties also fires for every valid prop once any branch fails, which misleads a
+        # repairing model. Report unknown props by name instead and validate the rest without it.
+        known = {"component", *spec["common_types"]["$defs"]["ComponentCommon"]["properties"],
+                 *(catalog["components"][name].get("properties") or {})}
+        for prop in component:
+            if prop not in known:
+                findings.add("screen-schema", f"screen/components/{index}", f"{name} has no property {prop!r}.")
+        schema = {"allOf": [{"$ref": SPEC_BASE + "common_types.json#/$defs/ComponentCommon"},
+                            {"$ref": f"{catalog_uri}#/components/{name}"}]}
+        schema_errors(schema, component, registry, "screen-schema", f"screen/components/{index}", findings)
+    if surface.get("catalogId") != catalog.get("catalogId"):
+        findings.add("screen", "screen/createSurface/catalogId", "Use the approved catalog's catalogId.")
+    data = surface.get("dataModel") or {}
+    definitions = catalog.get("components") or {}
+    components = {}
+    for index, component in enumerate(surface.get("components") or []):
+        where = f"screen/components/{index}"
+        cid = component.get("id")
+        if not identifier(cid):
+            findings.add("identifier", where, f"Component ID {cid!r} is not a UAX #31 identifier; the A2UI renderers reject it.")
+        if cid in components:
+            findings.add("structure", where, f"Duplicate component ID {cid!r}.")
+        if component.get("@catalogId") not in (None, catalog.get("catalogId")):
+            findings.add("screen", where, "Component-level catalog overrides are outside the approved catalog.")
+        components[cid] = component
+        definition = definitions.get(component.get("component"))
+        if not definition:
+            continue
+        for prop, value in component.items():
+            if prop not in (definition.get("properties") or {}):
+                continue
+            options = value_options(definition["properties"][prop], catalog)
+            if isinstance(value, str) and options and PATH_AS_TEXT.match(value.strip()):
+                findings.add("binding", f"{where}/{prop}", f"{value!r} is a data path written as text; bind it as {{\"@path\": \"/key\"}} or write the text itself.")
+            if isinstance(value, dict) and "@path" in value:
+                try:
+                    resolved = pointer(data, value["@path"])
+                except KeyError as error:
+                    findings.add("binding", f"{where}/{prop}", str(error).strip("'\""))
+                    continue
+                types = {t for t, _ in options} - {"object"}
+                if types and not any(isinstance(resolved, TYPE_CHECK[t]) and not (t in {"number", "integer"} and isinstance(resolved, bool))
+                                     for t in types if t in TYPE_CHECK):
+                    findings.add("binding", f"{where}/{prop}", f"Binding {value['@path']} resolves to {type(resolved).__name__}, expected {sorted(types)}.")
+                for kind, fmt in options:
+                    if fmt and kind == "string" and isinstance(resolved, str) and not FORMATS.conforms(resolved, fmt):
+                        findings.add("binding", f"{where}/{prop}", f"Binding {value['@path']} resolves to {resolved!r}, not a valid {fmt}.")
+    root = components.get("root")
+    if not root:
+        findings.add("structure", "screen", "Name the top-level component root.")
+        return components
+    root_definition = definitions.get(root.get("component"), {})
+    if "Surface" not in (root_definition.get("allowedParents") or ["Surface"]):
+        findings.add("structure", "root", f"{root.get('component')} cannot be the surface root.")
+    parents = {}
+    def walk(cid, trail):
+        component = components.get(cid)
+        definition = definitions.get(component.get("component"), {}) if component else {}
+        for prop, prop_schema in (definition.get("properties") or {}).items():
+            if not any("ChildList" in ref or "ComponentId" in ref for ref in refs_in(prop_schema)):
+                continue
+            for child in child_ids(component.get(prop)):
+                if child in trail:
+                    findings.add("structure", cid, f"Cycle through {child!r}.")
+                    continue
+                if child not in components:
+                    findings.add("structure", cid, f"Missing child {child!r}.")
+                    continue
+                if child in parents:
+                    findings.add("structure", cid, f"{child!r} is already used by {parents[child]!r}; use each component once.")
+                    continue
+                parents[child] = cid
+                child_type = components[child].get("component")
+                allowed_children = definition.get("allowedChildren")
+                allowed_parents = definitions.get(child_type, {}).get("allowedParents")
+                if (allowed_children and child_type not in allowed_children) or (allowed_parents and component.get("component") not in allowed_parents):
+                    findings.add("structure", cid, f"{child_type} {child!r} is not allowed inside {component.get('component')}.")
+                walk(child, trail | {child})
+    walk("root", {"root"})
+    for cid in components:
+        if cid != "root" and cid not in parents:
+            findings.add("structure", str(cid), "Unreachable from root.")
+    return components
+
+
+def check_hierarchy(table, screen, components, catalog, findings):
+    definitions = catalog.get("components") or {}
+    items = table.get("items") if isinstance(table, dict) else None
+    if not isinstance(items, list) or not items:
+        findings.add("hierarchy", "hierarchy", "List the screen's items with id, priority, says and words.")
+        return
+    seen = {}
+    for index, item in enumerate(items):
+        where = f"hierarchy/items/{index}"
+        if not isinstance(item, dict) or not identifier(item.get("id")) or item.get("priority") not in (1, 2, 3, "action") \
+                or not isinstance(item.get("says"), str) or not item["says"].strip() \
+                or not isinstance(item.get("words"), int) or isinstance(item.get("words"), bool) or item["words"] < 1:
+            findings.add("hierarchy", where, "Each item needs a UAX #31 id, priority 1/2/3/\"action\", what it says, and a positive word budget.")
+            continue
+        if item["id"] in seen:
+            findings.add("hierarchy", where, f"Duplicate item {item['id']!r}.")
+        seen[item["id"]] = item
+    if sum(1 for item in seen.values() if item["priority"] == 1) != 1:
+        findings.add("hierarchy", "hierarchy", "Approve exactly one P1 item.")
+    primary = table.get("primaryAction")
+    if primary not in seen or seen[primary]["priority"] != "action":
+        findings.add("hierarchy", "hierarchy/primaryAction", "Name exactly one action item as the primary action.")
+    data = (screen.get("createSurface") or {}).get("dataModel") or {}
+    for cid, component in components.items():
+        definition = definitions.get(component.get("component"), {})
+        role = role_of(definition)
+        if role == "frame":
+            layout = component.get("layout")
+            if cid == "root" and table.get("frame") and layout != table.get("frame"):
+                findings.add("hierarchy", cid, f"Root layout {layout!r} differs from the approved frame {table.get('frame')!r}.")
+            continue
+        if role not in EMPHASIS:
+            continue
+        item = seen.get(cid)
+        if not item:
+            findings.add("hierarchy", cid, f"{component.get('component')} {cid!r} is not in the approved hierarchy table; every visible item needs a priority.")
+            continue
+        expected = {1: "p1", 2: "p2", 3: "p3"}.get(item["priority"]) or ("primary" if cid == primary else "secondary")
+        if (role == "action") != (item["priority"] == "action"):
+            findings.add("hierarchy", cid, f"Table priority {item['priority']!r} does not fit a {role} component.")
+        elif component.get("emphasis") != expected:
+            findings.add("hierarchy", cid, f"Emphasis {component.get('emphasis')!r} should be {expected!r} per the approved table.")
+        words = visible_text(component, definition, data, catalog)
+        if words > item["words"]:
+            findings.add("copy", cid, f"{words} words exceed the approved budget of {item['words']}.")
+    for cid in seen:
+        if cid not in components:
+            findings.add("hierarchy", cid, "Approved item missing from the screen.")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--catalog", required=True, help="A2UI v1.0 catalog JSON")
+    parser.add_argument("--screen", help="A2UI createSurface message JSON; omit to check the catalog alone")
+    parser.add_argument("--hierarchy", help="owner-approved hierarchy.json for this screen")
+    parser.add_argument("--json", action="store_true", help="print findings as JSON")
+    args = parser.parse_args()
+    if args.hierarchy and not args.screen:
+        parser.error("--hierarchy needs --screen")
+    catalog = load(args.catalog)
+    registry, spec = registry_for(catalog)
+    findings = Findings()
+    check_catalog(catalog, registry, spec, findings)
+    if args.screen:
+        screen = load(args.screen)
+        components = check_screen(screen, catalog, registry, spec, findings)
+        if args.hierarchy and components is not None:
+            check_hierarchy(load(args.hierarchy), screen, components, catalog, findings)
+    if args.json:
+        print(json.dumps({"valid": not findings, "findings": findings}, ensure_ascii=False, indent=2))
+    else:
+        for finding in findings:
+            print(f"{finding['kind']}: {finding['where']}: {finding['message']}")
+        print("valid" if not findings else f"{len(findings)} finding(s)")
+    return 1 if findings else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

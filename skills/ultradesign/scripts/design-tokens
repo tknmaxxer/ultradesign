@@ -1,0 +1,262 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["PyYAML==6.0.3"]
+# ///
+"""Compile DESIGN.md to CSS, catalog JSON and optional typed scene tokens.
+
+Exit 0: generated/fresh; 1: stale outputs in --check; 2: invalid input or I/O.
+"""
+
+import argparse
+import json
+import math
+from pathlib import Path
+import re
+import sys
+
+import yaml
+
+
+PREFIXES = {
+    "colors": "color", "typography": "type", "rounded": "radius",
+    "spacing": "space", "motion": "motion", "components": "component",
+}
+KEY = re.compile(r"[A-Za-z0-9_-]+")
+REFERENCE = re.compile(r"\{([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+)\}")
+MAX_DEPTH = 20
+MAX_REFERENCES = 10
+
+
+class DesignError(ValueError):
+    pass
+
+
+class UniqueLoader(yaml.SafeLoader):
+    pass
+
+
+# Match alpha's YAML 1.2 booleans: names such as "on"/"off" are strings.
+UniqueLoader.yaml_implicit_resolvers = {
+    key: [(tag, rule) for tag, rule in rules if tag != "tag:yaml.org,2002:bool"]
+    for key, rules in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+UniqueLoader.add_implicit_resolver("tag:yaml.org,2002:bool", re.compile(r"^(?:true|false)$", re.I), list("tTfF"))
+
+
+def unique_mapping(loader, node):
+    result = {}
+    yield result
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node)
+        if type(key) not in (str, int):
+            raise DesignError(f"Token keys must be strings or integers at line {key_node.start_mark.line + 1}.")
+        key = str(key)
+        if key in result:
+            raise DesignError(f"Duplicate YAML key {key!r} at line {key_node.start_mark.line + 1}.")
+        result[key] = loader.construct_object(value_node)
+
+
+UniqueLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, unique_mapping)
+
+
+def load_design(path):
+    text = path.read_text(encoding="utf-8-sig")
+    match = re.match(r"\A---\r?\n(.*?)\r?\n---(?:\r?\n|\Z)", text, re.S)
+    if not match:
+        raise DesignError("DESIGN.md must begin with --- delimited YAML front matter.")
+    design = yaml.load(match[1], Loader=UniqueLoader)
+    if not isinstance(design, dict):
+        raise DesignError("YAML front matter must be a mapping.")
+    if not isinstance(design.get("name"), str) or not design["name"].strip():
+        raise DesignError("DESIGN.md alpha requires a nonempty name.")
+    if design.get("version", "alpha") != "alpha":
+        raise DesignError("Only DESIGN.md version alpha is supported.")
+    if not any(group in design for group in PREFIXES):
+        raise DesignError("No supported token groups found.")
+    return design
+
+
+def css_key(path):
+    parts = path.split(".")
+    parts[0] = PREFIXES[parts[0]]
+    return "--" + "-".join(re.sub(r"[A-Z]", lambda m: "-" + m[0].lower(), part) for part in parts)
+
+
+def compile_design(design):
+    """Return CSS and {group: [{path, value, resolved, css}]} with emitted leaves only."""
+    sources = {}
+
+    def collect(value, path, depth=0, ancestors=()):
+        if depth > MAX_DEPTH:
+            raise DesignError(f"Token nesting exceeds {MAX_DEPTH}: {path}")
+        if isinstance(value, dict):
+            if id(value) in ancestors:
+                raise DesignError(f"Cyclic YAML mapping: {path}")
+            if not value:
+                raise DesignError(f"Empty token group: {path}")
+            for key in sorted(value):
+                if not KEY.fullmatch(key):
+                    raise DesignError(f"Invalid token key {key!r} under {path}; use letters, digits, _ or -.")
+                collect(value[key], f"{path}.{key}", depth + 1, (*ancestors, id(value)))
+        elif type(value) not in (str, int, float) or isinstance(value, float) and not math.isfinite(value):
+            raise DesignError(f"Expected a finite number, CSS string, or token group: {path}")
+        sources[path] = value
+
+    for group in PREFIXES:
+        if group in design:
+            if not isinstance(design[group], dict):
+                raise DesignError(f"{group} must be a mapping.")
+            collect(design[group], group)
+
+    def resolve(path, trail=(), references=0):
+        if path not in sources:
+            # A reference may address a leaf below a composite alias.
+            parts = path.split(".")
+            parent = ".".join(parts[:-1])
+            while parent and parent not in sources:
+                parent = parent.rpartition(".")[0]
+            if not parent or not isinstance(sources[parent], str) or not REFERENCE.fullmatch(sources[parent]):
+                raise DesignError(f"Missing token reference: {path}")
+            obj = resolve(parent, trail, references)
+            for key in parts[len(parent.split(".")):]:
+                if not isinstance(obj, dict) or key not in obj:
+                    raise DesignError(f"Missing token reference: {path}")
+                obj = obj[key]
+            return obj
+        if path in trail:
+            raise DesignError("Cyclic token reference: " + " -> ".join((*trail, path)))
+        value = sources[path]
+        if isinstance(value, dict):
+            return {key: resolve(f"{path}.{key}", (*trail, path), references) for key in sorted(value)}
+        target = REFERENCE.fullmatch(value) if isinstance(value, str) else None
+        if target:
+            if references >= MAX_REFERENCES:
+                raise DesignError(f"Token alias chain exceeds {MAX_REFERENCES}: {path}")
+            if target[1].split(".")[0] not in PREFIXES:
+                raise DesignError(f"References must target token groups, not metadata: {path} -> {target[1]}")
+            return resolve(target[1], (*trail, path), references + 1)
+        if isinstance(value, str):
+            if not value.strip() or re.search(r"[{};<>\\\x00-\x1f\x7f]|/\*|\*/", value):
+                raise DesignError(f"Unsafe or malformed CSS value at {path}: {value!r}")
+            if re.search(r"(?:url|expression)\s*\(|@(?:import|charset)", value, re.I):
+                raise DesignError(f"External resources and executable CSS are not token values: {path}")
+        return value
+
+    variables = {}
+    catalog = {group: [] for group in PREFIXES}
+
+    def emit(path, raw, resolved, alias=None):
+        if isinstance(resolved, dict):
+            if alias is None:
+                raise DesignError(f"Expected a composite alias at {path}")
+            for key, value in resolved.items():
+                target = f"{alias}.{key}"
+                emit(f"{path}.{key}", "{" + target + "}", value, target)
+            return
+        prop = css_key(path)
+        if prop in variables:
+            raise DesignError(f"CSS property collision: {variables[prop][0]} and {path} both emit {prop}")
+        variables[prop] = (path, f"var({css_key(alias)})" if alias else str(resolved))
+        catalog[path.split(".")[0]].append({"path": path, "value": raw, "resolved": resolved, "css": prop})
+
+    for path, raw in sorted(sources.items()):
+        if isinstance(raw, dict):
+            continue
+        resolved = resolve(path)
+        match = REFERENCE.fullmatch(raw) if isinstance(raw, str) else None
+        emit(path, raw, resolved, match[1] if match else None)
+
+    for prop, (path, value) in variables.items():
+        if value.startswith("var(") and value[4:-1] not in variables:
+            raise DesignError(f"Alias at {path} does not point to an emitted CSS property: {value}")
+    css = "/* Generated from DESIGN.md by design-tokens. Edit DESIGN.md, not this file. */\n:root {\n"
+    css += "".join(f"  {prop}: {entry[1]};\n" for prop, entry in sorted(variables.items()))
+    css += "}\n"
+    motion = catalog["motion"]
+    if any(entry["path"] in ("motion.duration", "motion.easing") for entry in motion):
+        raise DesignError("motion.duration and motion.easing must be token groups.")
+    durations = [entry for entry in motion if entry["path"].startswith("motion.duration.")]
+    if durations and (len(durations) != 6 or any(len(entry["path"].split(".")) != 3 for entry in durations)):
+        raise DesignError("motion.duration must contain exactly six duration leaves.")
+    for entry in durations:
+        duration_ms(entry)
+    for entry in motion:
+        if entry["path"].startswith("motion.easing."):
+            parts = entry["path"].split(".")
+            if len(parts) != 4 or parts[2] not in ("productive", "expressive"):
+                raise DesignError("Use motion.easing.productive.* or motion.easing.expressive.*.")
+            if not isinstance(entry["resolved"], str):
+                raise DesignError(f"Easing must be a CSS string: {entry['path']}")
+    return css, json.dumps(catalog, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+
+
+def duration_ms(entry):
+    match = re.fullmatch(r"(\d+(?:\.\d+)?)\s*(ms|s)", str(entry["resolved"]))
+    if not match:
+        raise DesignError(f"Duration must be a nonnegative CSS time (ms or s): {entry['path']}")
+    value = float(match[1]) * (1000 if match[2] == "s" else 1)
+    if not math.isfinite(value):
+        raise DesignError(f"Duration must be finite: {entry['path']}")
+    return int(value) if value.is_integer() else value
+
+
+def compile_typescript(catalog):
+    """Keep semantic paths; aliases are resolved and duration numbers are milliseconds."""
+    tokens = {"colors": {}, "motion": {"duration": {}, "easing": {}}}
+    for group in ("colors", "motion"):
+        for entry in json.loads(catalog)[group]:
+            path = entry["path"].split(".")
+            if group == "motion" and path[1] not in ("duration", "easing"):
+                continue
+            target = tokens
+            for part in path[:-1]:
+                target = target.setdefault(part, {})
+            target[path[-1]] = duration_ms(entry) if path[:2] == ["motion", "duration"] else entry["resolved"]
+    return (
+        "// Generated from DESIGN.md by design-tokens. Do not edit.\n"
+        "// Motion durations are milliseconds; colors and easings are resolved CSS values.\n"
+        "export const tokens = " + json.dumps(tokens, ensure_ascii=False, indent=2, allow_nan=False) + " as const;\n"
+        "export type Tokens = typeof tokens;\n"
+        "export type MotionDuration = keyof Tokens['motion']['duration'];\n"
+        "export type ColorToken = keyof Tokens['colors'];\n"
+    )
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("design", type=Path)
+    parser.add_argument("--out", type=Path, required=True, help="Generated CSS destination.")
+    parser.add_argument("--catalog", type=Path, required=True, help="Generated JSON destination.")
+    parser.add_argument("--ts", type=Path, help="Optional generated TypeScript destination (durations in ms).")
+    parser.add_argument("--check", action="store_true", help="Read-only: exit 1 for missing/stale outputs.")
+    args = parser.parse_args()
+    try:
+        paths = [args.design.resolve(), args.out.resolve(), args.catalog.resolve()]
+        if args.ts:
+            paths.append(args.ts.resolve())
+        if len(set(paths)) != len(paths):
+            raise DesignError("DESIGN.md and all output paths must be distinct.")
+        css, catalog = compile_design(load_design(args.design))
+        outputs = [(args.out, css), (args.catalog, catalog)]
+        if args.ts:
+            outputs.append((args.ts, compile_typescript(catalog)))
+        if args.check:
+            stale = [str(path) for path, content in outputs if not path.is_file() or path.read_text(encoding="utf-8") != content]
+            if stale:
+                print("Stale or missing generated output: " + ", ".join(stale), file=sys.stderr)
+                return 1
+        else:
+            for path, content in outputs:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content, encoding="utf-8")
+        count = sum(len(entries) for entries in json.loads(catalog).values())
+        print(f"{count} CSS properties and catalog leaves; {'checked' if args.check else 'generated'} from {args.design}.")
+        return 0
+    except (DesignError, yaml.YAMLError, OSError, UnicodeError, RecursionError) as error:
+        print(f"design-tokens: {error}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,32 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+import catalog from '../generated/catalog.generated.json';
+
+<Meta title="System/Tokens" />
+
+# Tokens
+
+Generated from `DESIGN.md`. Edit the contract, regenerate, and check freshness;
+this page reads the same catalog as the build. Alias and resolved values appear together.
+On narrow screens, scroll each table horizontally to inspect its resolved value
+and specimen; keyboard users can focus the table region and use the arrow keys.
+
+{Object.entries(catalog).filter(([, entries]) => entries.length).map(([group, entries]) => (
+  <section key={group}>
+    <h2>{group}</h2>
+    <div className="ud-token-table" role="region" aria-label={`${group} tokens`} tabIndex={0}>
+    <table>
+      <thead><tr><th>Token</th><th>Source</th><th>Resolved</th><th>Specimen</th></tr></thead>
+      <tbody>{entries.map((token) => (
+        <tr key={token.path}>
+          <th scope="row"><code>{token.path}</code></th>
+          <td><code>{String(token.value)}</code></td>
+          <td><code>{String(token.resolved)}</code></td>
+          <td>{group === 'colors'
+            ? <span className="ud-swatch" style={{ backgroundColor: `var(${token.css})` }} aria-label={token.path} />
+            : <code>{token.css}</code>}</td>
+        </tr>
+      ))}</tbody>
+    </table>
+    </div>
+  </section>
+))}

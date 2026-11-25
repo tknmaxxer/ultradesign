@@ -1,0 +1,14 @@
+{
+  "name": "ultradesign",
+  "version": "0.6.0",
+  "description": "Designer-workflow frontend design: brief, structure and copy, reference principles, directions, assets, Storybook system, motion, composition map, thin slice, independent review.",
+  "type": "module",
+  "files": ["adapters/", "skills/"],
+  "omp": {
+    "extensions": ["./adapters/omp/index.ts"]
+  },
+  "scripts": {
+    "test": "bun test",
+    "test:host": "bun tests/omp-host.mjs"
+  }
+}
